@@ -10,7 +10,7 @@ cv2.ocl.setUseOpenCL(False)  # NOQA
 import gym
 import numpy as np
 
-from chainerrl import demonstration
+from pfrl import demonstration
 from pfrl.wrappers import atari_wrappers
 from pfrl.wrappers.score_mask_atari import AtariMask
 
