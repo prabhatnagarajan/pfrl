@@ -241,6 +241,7 @@ def main():
                 from chainer import serializers
                 serializers.load_npz(args.load_trex, network)
             trex_reward = TREXReward(ranked_demos=demo_dataset,
+                             optimizer=None,
                              steps=args.trex_steps,
                              network=network,
                              train_network=(False if args.load_trex else True),

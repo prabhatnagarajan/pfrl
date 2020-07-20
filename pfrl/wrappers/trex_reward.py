@@ -4,9 +4,7 @@ import random
 
 import torch
 from torch import nn
-import chainer.functions as F
-import chainer.links as L
-from chainer import optimizers
+import torch.nn.functional as F
 import gym
 import numpy as np
 
@@ -34,7 +32,6 @@ class TrexArch(nn.Module):
         self.fc2 = nn.Linear(64, 1)
 
 
-
     def cum_return(self, traj):
         '''calculate cumulative return of trajectory'''
         sum_rewards = 0
@@ -60,28 +57,6 @@ class TrexArch(nn.Module):
         return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j
 
 
-# class TREXNet(chainer.ChainList):
-#     """TREX's architecture: https://arxiv.org/abs/1904.06387"""
-
-
-#     def __init__(self):
-#         layers = [
-#             L.Convolution2D(4, 16, 7, stride=3),
-#             L.Convolution2D(16, 16, 5, stride=2),
-#             L.Convolution2D(16, 16, 3, stride=1),
-#             L.Convolution2D(16, 16, 3, stride=1),
-#             L.Linear(784, 64),
-#             L.Linear(64, 1)
-#         ]
-
-#         super(TREXNet, self).__init__(*layers)
-
-#     def __call__(self, trajectory):
-#         h = trajectory
-#         for layer in self:
-#             h = F.leaky_relu(layer(h))
-#         return h
-
 class TREXReward():
     """Implements Trajectory-ranked Reward EXtrapolation (TREX):
     https://arxiv.org/abs/1904.06387.
@@ -103,7 +78,7 @@ class TREXReward():
 
     def __init__(self,
                  ranked_demos,
-                 opt,
+                 optimizer,
                  steps=30000,
                  num_sub_trajs=12800,
                  sub_traj_len=(50,100),
@@ -132,7 +107,11 @@ class TREXReward():
         self.phi = phi
         self.running_losses = collections.deque([], maxlen=10)
         if self.train_network:
-            self.opt = opt
+            if optimizer is None:
+                self.optimizer = torch.optim.Adam(self.trex_network.parameters(),
+                                                  lr=5e-5)
+            else:
+                self.optimizer = optimizer
             if gpu is not None and gpu >= 0:
                 assert torch.cuda.is_available()
                 self.device = torch.device("cuda:{}".format(gpu))
@@ -201,13 +180,14 @@ class TREXReward():
                                            for example in batch],
             'label' : xp.array([example[2] for example in batch])
         }
-        rewards_i = [F.sum(self.trex_network(preprocessed['i'][i])) for i in range(len(preprocessed['i']))]
-        rewards_j = [F.sum(self.trex_network(preprocessed['j'][i])) for i in range(len(preprocessed['j']))]
-        rewards_i = F.expand_dims(F.stack(rewards_i), 1)
-        rewards_j = F.expand_dims(F.stack(rewards_j), 1)
-        predictions = F.concat((rewards_i, rewards_j))
-        mean_loss = F.mean(F.softmax_cross_entropy(predictions,
-                                                   preprocessed['label']))
+        rewards_i = [torch.sum(self.trex_network(preprocessed['i'][i])) for i in range(len(preprocessed['i']))]
+        rewards_j = [torch.sum(self.trex_network(preprocessed['j'][i])) for i in range(len(preprocessed['j']))]
+        rewards_i = torch.expand_dims(torch.stack(rewards_i), 1)
+        rewards_j = torch.expand_dims(torch.stack(rewards_j), 1)
+        predictions = torch.concat((rewards_i, rewards_j))
+        loss_func = nn.CrossEntropyLoss()
+        losses = loss_func(predictions, preprocessed['label'])
+        mean_loss = torch.mean(losses)
         return mean_loss
 
     def _train(self):
@@ -215,8 +195,11 @@ class TREXReward():
             # get batch of traj pairs
             batch = self.get_training_batch()
             # do updates
+            self.optimizer.zero_grad()
             loss = self._compute_loss(batch)
-            self.running_losses.append(loss.item())
+            loss.backward()
+            self.optimizer.step()
+            self.running_losses.append(loss.detach.cpu().numpy())
             if len(self.running_losses) == 10:
                 with open(os.path.join(self.outdir, 'trex_loss_info.txt'), 'a') as f:
                     print(sum(self.running_losses)/10.0, file=f)
@@ -252,8 +235,6 @@ class TREXRewardEnv(gym.Wrapper):
                           self.trex_network.phi)
         with torch.no_grad():
             inverse_reward = torch.sigmoid(self.trex_network(obs)).cpu().numpy()
-        # with chainer.no_backprop_mode():
-        #     inverse_reward = F.sigmoid(self.trex_network(obs)).item()
         info["true_reward"] = reward
         return observation, inverse_reward, done, info
 
@@ -280,7 +261,7 @@ class TREXMultiprocessRewardEnv(MultiprocessVectorEnv):
         self.last_obs, rews, dones, infos = zip(*results)
         obs = batch_states(self.last_obs, self.trex_network.xp,
                           self.trex_network.phi)
-        trex_rewards = F.sigmoid(self.trex_network(obs))
+        trex_rewards = torch.sigmoid(self.trex_network(obs))
         trex_rewards = tuple(trex_rewards.array[:,0].tolist())
         for i in range(len(rews)):
             infos[i]["true_reward"] = rews[i]
@@ -312,7 +293,7 @@ class TREXVectorEnv(VectorFrameStack):
         obs = self._get_ob()
         processed_obs = batch_states(obs, self.trex_network.xp,
                                      self.trex_network.phi)
-        trex_rewards = F.sigmoid(self.trex_network(processed_obs))
+        trex_rewards = torch.sigmoid(self.trex_network(processed_obs))
         # convert variable([[r1],[r2], ...]) to tuple
         trex_rewards = tuple(trex_rewards.array[:,0].tolist())
         for i in range(len(rewards)):

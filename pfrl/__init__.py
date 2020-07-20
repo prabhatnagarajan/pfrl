@@ -1,6 +1,7 @@
 from pfrl import action_value  # NOQA
 from pfrl import agent  # NOQA
 from pfrl import agents  # NOQA
+from pfrl import demonstration  # NOQA
 from pfrl import distributions  # NOQA
 from pfrl import env  # NOQA
 from pfrl import envs  # NOQA
