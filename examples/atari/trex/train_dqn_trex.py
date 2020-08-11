@@ -16,7 +16,7 @@ import numpy as np
 
 
 import pfrl
-from pfrl.action_value import DiscreteActionValue
+from pfrl.q_functions import DiscreteActionValueHead
 from pfrl import agents
 from pfrl import demonstration
 from pfrl import experiments
@@ -28,7 +28,7 @@ from pfrl import replay_buffers
 from pfrl.wrappers import atari_wrappers
 from pfrl.initializers import init_chainer_default
 from pfrl.wrappers import score_mask_atari
-from pfrl.wrappers.trex_reward import TREXNet
+from pfrl.wrappers.trex_reward import TREXArch
 from pfrl.wrappers.trex_reward import TREXReward
 from pfrl.wrappers.trex_reward import TREXRewardEnv
 
@@ -149,17 +149,17 @@ def main():
                         help='Mask when you render.')
     parser.add_argument('--trex-steps', type=int, default=30000,
                         help='Number of TREX updates.')
-    parser.add_argument('--gc-loc', type=str,
-                        help='Atari Grand Challenge Data location.')
-    parser.add_argument('--load-demos', type=str, 
-                        help='Location of demonstrations pickle file.')
+    parser.add_argument('--demo-type', type=str,
+                        choices=['agc', 'synth'], required=True)
+    parser.add_argument('--load-demos', type=str,
+                        help='Atari Grand Challenge Data location or demo pickle file location.')
     args = parser.parse_args()
 
     import logging
     logging.basicConfig(level=args.logging_level)
 
-    # Set a random seed used in ChainerRL.
-    misc.set_random_seed(args.seed, gpus=(args.gpu,))
+    # Set a random seed used in PFRL.
+    utils.set_random_seed(args.seed)
 
     # Set different random seeds for train and test envs.
     train_seed = args.seed
@@ -168,18 +168,14 @@ def main():
     args.outdir = experiments.prepare_output_dir(args, args.outdir)
     print('Output files are saved in {}'.format(args.outdir))
 
-    assert xor(bool(args.gc_loc), bool(args.load_demos)), \
-        "Must specify exactly one of the location of Atari Grand " + \
-        "Challenge dataset or the location of demonstrations " + \
-        "stored in a pickle file."
-    if args.gc_loc:
+    if args.demo_type == 'agc':
         assert args.env in ['SpaceInvadersNoFrameskip-v4',
                             'MontezumaRevengeNoFrameskip-v4',
                             'MsPacmanNoFrameskip-v4',
                             'QbertNoFrameskip-v4',
                             'VideoPinballNoFrameskip-v4'
                             ]
-    else:
+    if args.demo_type == 'synth':
         assert args.env in ['SpaceInvadersNoFrameskip-v4',
                             'PongNoFrameskip-v4',
                             'BreakoutNoFrameskip-v4',
@@ -202,6 +198,7 @@ def main():
                             'TennisNoFrameskip-v4',
                             'IceHockeyNoFrameskip-v4']
 
+
     def phi(x):
         # Feature extractor
         return np.asarray(x, dtype=np.float32) / 255
@@ -219,32 +216,41 @@ def main():
             # Randomize actions like epsilon-greedy in evaluation as well
             env = pfrl.wrappers.RandomizeAction(env, args.eval_epsilon)
         else:
-            if args.gc_loc:
+            train_network=(False if args.load_trex else True)
+            if args.demo_type == 'agc':
                 demo_extractor = demo_parser.AtariGrandChallengeParser(
-                    args.gc_loc, env, args.outdir)
+                    args.load_demos, env, args.outdir, not train_network)
             else:
-                demo_extractor = demo_parser.ChainerRLAtariDemoParser(
-                    args.load_demos, env, 12, args.outdir)
-            episodes = demo_extractor.episodes
-            # Sort episodes by ground truth ranking
-            # episodes contain transitions of (obs, a, r, new_obs, done, info)
-            # redundance for sanity - demoparser should return sorted
-            ranked_episodes = sorted(episodes,
-                                     key=lambda ep:sum([ep[i]['reward'] for i in range(len(ep))]))
-            episode_rewards = [sum([episode[i]['reward']  \
-                               for i in range(len(episode))]) \
-                               for episode in ranked_episodes]
-            demo_dataset = demonstration.RankedDemoDataset(ranked_episodes)
-            assert sorted(episode_rewards) == episode_rewards
-            network = TREXNet()
+                demo_extractor = demo_parser.PFRLAtariDemoParser(
+                    args.load_demos, env, 12, args.outdir, not train_network)
+            demo_dataset = None
+            if train_network:
+                episodes = demo_extractor.episodes
+                # Sort episodes by ground truth ranking
+                # episodes contain transitions of (obs, a, r, new_obs, done, info)
+                # redundance for sanity - demoparser should return sorted
+                ranked_episodes = sorted(episodes,
+                                         key=lambda ep:sum([ep[i]['reward'] for i in range(len(ep))]))
+                episode_rewards = [sum([episode[i]['reward']  \
+                                   for i in range(len(episode))]) \
+                                   for episode in ranked_episodes]
+                demo_dataset = demonstration.RankedDemoDataset(ranked_episodes)
+                assert sorted(episode_rewards) == episode_rewards
+            network = TREXArch()
+            if args.gpu is not None and args.gpu >= 0:
+                assert torch.cuda.is_available()
+                device = torch.device("cuda:{}".format(gpu))
+            else:
+                device = torch.device('cpu')
             if args.load_trex:
-                from chainer import serializers
-                serializers.load_npz(args.load_trex, network)
+                network.load_state_dict(torch.load(args.load_trex, map_location=device))
+
+
             trex_reward = TREXReward(ranked_demos=demo_dataset,
                              optimizer=None,
                              steps=args.trex_steps,
                              network=network,
-                             train_network=(False if args.load_trex else True),
+                             train_network=train_network,
                              gpu=args.gpu,
                              outdir=args.outdir,
                              phi=phi,
@@ -274,17 +280,14 @@ def main():
             args.final_exploration_frames,
             lambda: np.random.randint(n_actions))
 
-    # Draw the computational graph and save it in the output directory.
-    pfrl.misc.draw_computational_graph(
-        [q_func(np.zeros((4, 84, 84), dtype=np.float32)[None])],
-        os.path.join(args.outdir, 'model'))
-
-    # Use the Nature paper's hyperparameters
-    opt = optimizers.RMSpropGraves(
-        lr=args.lr, alpha=0.95, momentum=0.0, eps=1e-2)
-
-    opt.setup(q_func)
-
+    opt = pfrl.optimizers.RMSpropEpsInsideSqrt(
+        q_func.parameters(),
+        lr=2.5e-4,
+        alpha=0.95,
+        momentum=0.0,
+        eps=1e-2,
+        centered=True,
+    )
     # Select a replay buffer to use
     if args.prioritized:
         # Anneal beta from beta0 to 1 throughout training
@@ -294,7 +297,7 @@ def main():
             beta0=0.4, betasteps=betasteps,
             num_steps=args.num_step_return)
     else:
-        rbuf = replay_buffer.ReplayBuffer(10 ** 6, args.num_step_return)
+        rbuf = replay_buffers.ReplayBuffer(10 ** 6, args.num_step_return)
 
     Agent = parse_agent(args.agent)
     agent = Agent(q_func, opt, rbuf, gpu=args.gpu, gamma=0.99,
@@ -342,7 +345,6 @@ def main():
             # temporary hack to handle python 2/3 support issues.
             # json dumps does not support non-string literal dict keys
             json_stats = json.dumps(stats)
-            print(str(json_stats), file=f)
         print("The results of the best scoring network:")
         for stat in stats:
             print(str(stat) + ":" + str(stats[stat]))

@@ -16,7 +16,7 @@ from pfrl.wrappers.scale_reward import ScaleReward  # NOQA
 from pfrl.wrappers.vector_frame_stack import VectorFrameStack  # NOQA
 
 # We import trex_reward after vector_frame_stack
-from pfrl.wrappers.trex_reward import TREXNet  # NOQA
+from pfrl.wrappers.trex_reward import TREXArch  # NOQA
 from pfrl.wrappers.trex_reward import TREXReward  # NOQA
 from pfrl.wrappers.trex_reward import TREXRewardEnv  # NOQA
 from pfrl.wrappers.trex_reward import TREXMultiprocessRewardEnv  # NOQA

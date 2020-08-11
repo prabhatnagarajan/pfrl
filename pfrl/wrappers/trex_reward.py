@@ -9,7 +9,7 @@ import gym
 import numpy as np
 
 from pfrl.envs import MultiprocessVectorEnv
-from pfrl.misc.batch_states import batch_states
+from pfrl.utils.batch_states import batch_states
 from pfrl.wrappers import VectorFrameStack
 
 
@@ -17,10 +17,7 @@ def subseq(seq, subseq_len, start):
     return seq[start: start + subseq_len]
 
 
-'''
-Forked from https://github.com/hiwonjoon/ICML2019-TREX/blob/master/atari/LearnAtariReward.py#L165
-'''
-class TrexArch(nn.Module):
+class TREXArch(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -32,12 +29,10 @@ class TrexArch(nn.Module):
         self.fc2 = nn.Linear(64, 1)
 
 
-    def cum_return(self, traj):
+    def forward(self, traj):
         '''calculate cumulative return of trajectory'''
-        sum_rewards = 0
-        sum_abs_rewards = 0
-        x = traj.permute(0,3,1,2) #get into NCHW format
         #compute forward pass of reward network (we parallelize across frames so batch size is length of partial trajectory)
+        x = traj
         x = F.leaky_relu(self.conv1(x))
         x = F.leaky_relu(self.conv2(x))
         x = F.leaky_relu(self.conv3(x))
@@ -45,16 +40,7 @@ class TrexArch(nn.Module):
         x = x.view(-1, 784)
         x = F.leaky_relu(self.fc1(x))
         r = self.fc2(x)
-        sum_rewards += torch.sum(r)
-        sum_abs_rewards += torch.sum(torch.abs(r))
-        return sum_rewards, sum_abs_rewards
-
-
-    def forward(self, traj_i, traj_j):
-        '''compute cumulative return for each trajectory and return logits'''
-        cum_r_i, abs_r_i = self.cum_return(traj_i)
-        cum_r_j, abs_r_j = self.cum_return(traj_j)
-        return torch.cat((cum_r_i.unsqueeze(0), cum_r_j.unsqueeze(0)),0), abs_r_i + abs_r_j
+        return r
 
 
 class TREXReward():
@@ -84,7 +70,7 @@ class TREXReward():
                  sub_traj_len=(50,100),
                  traj_batch_size=16,
                  sample_live=True,
-                 network=TREXNet(),
+                 network=TREXArch(),
                  train_network=True,
                  gpu=None,
                  outdir=None,
@@ -106,6 +92,11 @@ class TREXReward():
         self.examples = []      
         self.phi = phi
         self.running_losses = collections.deque([], maxlen=10)
+        if gpu is not None and gpu >= 0:
+            assert torch.cuda.is_available()
+            self.device = torch.device("cuda:{}".format(gpu))
+        else:
+            self.device = torch.device("cpu")
         if self.train_network:
             if optimizer is None:
                 self.optimizer = torch.optim.Adam(self.trex_network.parameters(),
@@ -113,11 +104,7 @@ class TREXReward():
             else:
                 self.optimizer = optimizer
             if gpu is not None and gpu >= 0:
-                assert torch.cuda.is_available()
-                self.device = torch.device("cuda:{}".format(gpu))
-                self.model.to(self.device)
-            else:
-                self.device = torch.device("cpu")
+                self.trex_network.to(self.device)
             self.save_network = save_network
             if self.save_network:
                 assert self.outdir
@@ -172,13 +159,13 @@ class TREXReward():
         return batch
 
     def _compute_loss(self, batch):
-        xp = self.trex_network.xp
+        device = self.device
         preprocessed = {
-            'i' : [batch_states([transition["obs"] for transition in example[0]], xp, self.phi)
+            'i' : [batch_states([transition["obs"] for transition in example[0]], device, self.phi)
                                for example in batch],
-            'j' : [batch_states([transition["obs"] for transition in example[1]], xp, self.phi)
+            'j' : [batch_states([transition["obs"] for transition in example[1]], device, self.phi)
                                            for example in batch],
-            'label' : xp.array([example[2] for example in batch])
+            'label' : torch.tensor([example[2] for example in batch], device=device)
         }
         rewards_i = [torch.sum(self.trex_network(preprocessed['i'][i])) for i in range(len(preprocessed['i']))]
         rewards_j = [torch.sum(self.trex_network(preprocessed['j'][i])) for i in range(len(preprocessed['j']))]
@@ -231,7 +218,7 @@ class TREXRewardEnv(gym.Wrapper):
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
-        obs = batch_states([observation], self.trex_network.xp,
+        obs = batch_states([observation], self.trex_network.device,
                           self.trex_network.phi)
         with torch.no_grad():
             inverse_reward = torch.sigmoid(self.trex_network(obs)).cpu().numpy()
