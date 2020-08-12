@@ -239,7 +239,7 @@ def main():
             network = TREXArch()
             if args.gpu is not None and args.gpu >= 0:
                 assert torch.cuda.is_available()
-                device = torch.device("cuda:{}".format(gpu))
+                device = torch.device("cuda:{}".format(args.gpu))
             else:
                 device = torch.device('cpu')
             if args.load_trex:

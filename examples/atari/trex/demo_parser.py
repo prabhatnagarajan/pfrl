@@ -264,9 +264,9 @@ class PFRLAtariDemoParser():
             dataset = chainer.datasets.open_pickle_dataset(demo_pickle_file)
             unmasked_episodes = demonstration.extract_episodes(dataset)
             print("Number of demonstrations: " + str(len(unmasked_episodes)))
-            assert len(unmasked_episodes) >= num_demos
-            selected_demos = self.select_demos(unmasked_episodes, num_demos)
-            assert len(selected_demos) == num_demos
+            assert len(unmasked_episodes) >= self.num_demos
+            selected_demos = self.select_demos(unmasked_episodes, self.num_demos)
+            assert len(selected_demos) == self.num_demos
             masked_episodes = []
             for episode in selected_demos:
                 masked_episode = self.preprocess(episode)

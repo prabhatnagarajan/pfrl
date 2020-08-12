@@ -169,9 +169,9 @@ class TREXReward():
         }
         rewards_i = [torch.sum(self.trex_network(preprocessed['i'][i])) for i in range(len(preprocessed['i']))]
         rewards_j = [torch.sum(self.trex_network(preprocessed['j'][i])) for i in range(len(preprocessed['j']))]
-        rewards_i = torch.expand_dims(torch.stack(rewards_i), 1)
-        rewards_j = torch.expand_dims(torch.stack(rewards_j), 1)
-        predictions = torch.concat((rewards_i, rewards_j))
+        rewards_i = torch.unsqueeze(torch.stack(rewards_i), 1)
+        rewards_j = torch.unsqueeze(torch.stack(rewards_j), 1)
+        predictions = torch.cat((rewards_i, rewards_j), dim=1)
         loss_func = nn.CrossEntropyLoss()
         losses = loss_func(predictions, preprocessed['label'])
         mean_loss = torch.mean(losses)
@@ -186,18 +186,15 @@ class TREXReward():
             loss = self._compute_loss(batch)
             loss.backward()
             self.optimizer.step()
-            self.running_losses.append(loss.detach.cpu().numpy())
+            self.running_losses.append(loss.detach().numpy())
             if len(self.running_losses) == 10:
                 with open(os.path.join(self.outdir, 'trex_loss_info.txt'), 'a') as f:
                     print(sum(self.running_losses)/10.0, file=f)
-            self.trex_network.cleargrads()
-            loss.backward()
-            self.opt.update()
             if step % int(self.steps / min(self.steps, 100)) == 0:
                 print("Performed update " + str(step) + "/" + str(self.steps))
         print("Finished training TREX network.")
         if self.save_network:
-            torch.save(self.trex_network.state_dict(), self.outdir)
+            torch.save(self.trex_network.state_dict(), os.path.join(self.outdir, "network.pt"))
 
     def __call__(self, x):
         return self.trex_network(x)
