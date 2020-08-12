@@ -237,14 +237,12 @@ def main():
                 demo_dataset = demonstration.RankedDemoDataset(ranked_episodes)
                 assert sorted(episode_rewards) == episode_rewards
             network = TREXArch()
-            print("Debug statement")
             if args.load_trex:
                 if args.gpu is not None and args.gpu >= 0:
                     assert torch.cuda.is_available()
                     device = torch.device("cuda:{}".format(args.gpu))
                 else:
                     device = torch.device('cpu')
-                print(device)
                 network.load_state_dict(torch.load(args.load_trex, map_location=device))
 
 

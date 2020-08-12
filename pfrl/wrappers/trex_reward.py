@@ -95,6 +95,7 @@ class TREXReward():
         if gpu is not None and gpu >= 0:
             assert torch.cuda.is_available()
             self.device = torch.device("cuda:{}".format(gpu))
+            self.trex_network.to(self.device)
         else:
             self.device = torch.device("cpu")
         if self.train_network:
@@ -103,8 +104,6 @@ class TREXReward():
                                                   lr=5e-5)
             else:
                 self.optimizer = optimizer
-            if gpu is not None and gpu >= 0:
-                self.trex_network.to(self.device)
             self.save_network = save_network
             if self.save_network:
                 assert self.outdir
