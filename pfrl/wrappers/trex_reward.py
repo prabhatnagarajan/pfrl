@@ -217,7 +217,7 @@ class TREXRewardEnv(gym.Wrapper):
         obs = batch_states([observation], self.trex_network.device,
                           self.trex_network.phi)
         with torch.no_grad():
-            inverse_reward = torch.sigmoid(self.trex_network(obs)).cpu().numpy()
+            inverse_reward = torch.sigmoid(self.trex_network(obs)).cpu().numpy()[0][0]
         info["true_reward"] = reward
         return observation, inverse_reward, done, info
 
