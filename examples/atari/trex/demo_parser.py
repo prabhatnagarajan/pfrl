@@ -308,22 +308,24 @@ class PFRLAtariDemoParser():
         masked_episode = []
         for entry in episode:
             masked_entry = dict()
+            # Copy transition
             for key in entry:
                 masked_entry[key] = entry[key]
-            obs = np.moveaxis(np.array(masked_entry["obs"]), 0, 2)
-            new_obs = np.moveaxis(np.array(masked_entry["new_obs"]), 0, 2)
-            masked_obs = self.mask(obs)
-            masked_new_obs = self.mask(new_obs)
-
+            # Change to (84, 84, 4)
+            masked_obs = self.mask(np.moveaxis(np.array(masked_entry["obs"]), 0, -1))
+            # Change to (4, 84, 84)
             masked_obs = list(np.moveaxis(masked_obs, 2, 0))
-            masked_new_obs = list(np.moveaxis(masked_new_obs, 2, 0))
+            # Expand each (84, 84) to (1, 84, 84)
             masked_obs = [np.expand_dims(item, 0) for item in masked_obs]
-            masked_new_obs = [np.expand_dims(item, 0) for item in masked_new_obs]
-
             masked_obs = atari_wrappers.LazyFrames(masked_obs,
                                        stack_axis=0)
+
+            # Do the same for the new obs
+            masked_new_obs = self.mask(np.moveaxis(np.array(masked_entry["new_obs"]), 0, -1))
+            masked_new_obs = list(np.moveaxis(masked_new_obs, 2, 0))
+            masked_new_obs = [np.expand_dims(item, 0) for item in masked_new_obs]
             masked_new_obs = atari_wrappers.LazyFrames(masked_new_obs,
-                                       stack_axis=0)                   
+                                       stack_axis=0)
             masked_entry["obs"] = masked_obs
             masked_entry["new_obs"] = masked_new_obs
             masked_episode.append(masked_entry)

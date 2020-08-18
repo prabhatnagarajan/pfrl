@@ -12,7 +12,6 @@ from pfrl.envs import MultiprocessVectorEnv
 from pfrl.utils.batch_states import batch_states
 from pfrl.wrappers import VectorFrameStack
 
-
 def subseq(seq, subseq_len, start):
     return seq[start: start + subseq_len]
 
@@ -30,8 +29,6 @@ class TREXArch(nn.Module):
 
 
     def forward(self, traj):
-        '''calculate cumulative return of trajectory'''
-        #compute forward pass of reward network (we parallelize across frames so batch size is length of partial trajectory)
         x = traj
         x = F.leaky_relu(self.conv1(x))
         x = F.leaky_relu(self.conv2(x))
@@ -112,7 +109,6 @@ class TREXReward():
 
     def create_example(self):
         '''Creates a training example.'''
-
         ranked_trajs = self.ranked_demos.episodes
         indices = np.arange(len(ranked_trajs)).tolist()
         traj_indices = np.random.choice(indices, size=2, replace=False)
@@ -166,15 +162,15 @@ class TREXReward():
                                            for example in batch],
             'label' : torch.tensor([example[2] for example in batch], device=device)
         }
+        # Sum up rewards of each trajectory in the batch
         rewards_i = [torch.sum(self.trex_network(preprocessed['i'][i])) for i in range(len(preprocessed['i']))]
         rewards_j = [torch.sum(self.trex_network(preprocessed['j'][i])) for i in range(len(preprocessed['j']))]
         rewards_i = torch.unsqueeze(torch.stack(rewards_i), 1)
         rewards_j = torch.unsqueeze(torch.stack(rewards_j), 1)
         predictions = torch.cat((rewards_i, rewards_j), dim=1)
         loss_func = nn.CrossEntropyLoss()
-        losses = loss_func(predictions, preprocessed['label'])
-        mean_loss = torch.mean(losses)
-        return mean_loss
+        loss = loss_func(predictions, preprocessed['label'])
+        return loss
 
     def _train(self):
         for step in range(1, self.steps + 1):
@@ -185,7 +181,7 @@ class TREXReward():
             loss = self._compute_loss(batch)
             loss.backward()
             self.optimizer.step()
-            self.running_losses.append(loss.detach().numpy())
+            self.running_losses.append(loss.detach().cpu().numpy())
             if len(self.running_losses) == 10:
                 with open(os.path.join(self.outdir, 'trex_loss_info.txt'), 'a') as f:
                     print(sum(self.running_losses)/10.0, file=f)
@@ -196,44 +192,45 @@ class TREXReward():
             torch.save(self.trex_network.state_dict(), os.path.join(self.outdir, "network.pt"))
 
     def __call__(self, x):
-        return self.trex_network(x)
+        with torch.no_grad():
+            return self.trex_network(x)
 
 class TREXRewardEnv(gym.Wrapper):
     """Environment Wrapper for neural network reward:
     Args:
         env: an Env
-        network: A reward Network
+        trex_reward: A TREXReward
     Attributes:
-        trex_network: Reward network
+        trex_reward: A TREXReward
     """
 
     def __init__(self, env,
-                 trex_network):
+                 trex_reward):
         super().__init__(env)
-        self.trex_network = trex_network
+        self.trex_reward = trex_reward
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
-        obs = batch_states([observation], self.trex_network.device,
-                          self.trex_network.phi)
-        with torch.no_grad():
-            inverse_reward = torch.sigmoid(self.trex_network(obs)).cpu().numpy()[0][0]
         info["true_reward"] = reward
+        obs = batch_states([observation], self.trex_reward.device,
+                          self.trex_reward.phi)
+        # Outputs a reward of a single state, so shape is (1,1)
+        inverse_reward = torch.sigmoid(self.trex_reward(obs)).cpu().numpy()[0][0]
         return observation, inverse_reward, done, info
 
 class TREXMultiprocessRewardEnv(MultiprocessVectorEnv):
     """Environment Wrapper for neural network reward:
     Args:
-        env: an Env
-        network: A reward Network
+        env_fns: an Env
+        trex_reward: A TREXReward
     Attributes:
         trex_network: Reward network
     """
 
     def __init__(self, env_fns,
-                 trex_network):
+                 trex_reward):
         super().__init__(env_fns)
-        self.trex_network = trex_network
+        self.trex_reward = trex_reward
 
 
     def step(self, actions):
