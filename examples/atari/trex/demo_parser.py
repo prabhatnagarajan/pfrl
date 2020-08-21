@@ -2,6 +2,7 @@
 https://github.com/hiwonjoon/ICML2019-TREX, an MIT-licensed project.
 """
 import collections
+import math
 import os
 
 import chainer
@@ -21,6 +22,25 @@ def str_to_bool(value):
          return False
     else:
          raise ValueError("{} is not a bool!".format(value))
+
+def get_spaced_indices(num_episodes, subset_size):
+    orig_subset_size = subset_size
+    assert num_episodes >= subset_size
+    indices = []
+    index=0
+    indices.append(index)
+    num_episodes -= 1
+    subset_size -= 1
+    while num_episodes > 0:
+        increment = num_episodes/subset_size
+        if increment > 1.0:
+            increment = math.ceil(increment)
+        index = int(index + increment)
+        indices.append(index)
+        num_episodes -= increment
+        subset_size -= 1
+    assert len(indices) == orig_subset_size
+    return indices
 
 class AtariGrandChallengeParser():
     """Parses Atari Grand Challenge data.
@@ -279,6 +299,7 @@ class PFRLAtariDemoParser():
             ep_rewards = [transition['reward'] for transition in episode]
             total_reward = sum(ep_rewards)
             total_rewards.append(total_reward)
+
         print(total_rewards)
         eps_and_rewards = zip(episodes, total_rewards)
         # select episodes with unique scores,
@@ -295,7 +316,10 @@ class PFRLAtariDemoParser():
         selected_episodes = [ep for ep, score in sorted(unique_score_episodes,
                                                         key=lambda x: x[1])]
         # take first num_demos demos
-        selected_episodes = selected_episodes[:num_demos]
+        total_num_episodes = len(selected_episodes)
+        indices = get_spaced_indices(total_num_episodes, num_demos)
+        assert len(indices) == num_demos
+        selected_episodes = [selected_episodes[index] for index in indices]
         selected_scores = [sum([transition['reward'] for transition in sel_episode])
                            for sel_episode in selected_episodes]
         with open(os.path.join(self.outdir, 'misc_info.txt'), 'a') as f:

@@ -234,6 +234,7 @@ def main():
                 episode_rewards = [sum([episode[i]['reward']  \
                                    for i in range(len(episode))]) \
                                    for episode in ranked_episodes]
+                print(episode_rewards)
                 demo_dataset = demonstration.RankedDemoDataset(ranked_episodes)
                 assert sorted(episode_rewards) == episode_rewards
             network = TREXArch()
