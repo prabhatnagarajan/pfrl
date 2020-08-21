@@ -257,7 +257,7 @@ def main():
                              save_network=True)
             env = TREXRewardEnv(env=env, trex_reward=trex_reward)
         if args.monitor:
-            env = gym.wrappers.Monitor(
+            env = pfrl.wrappers.Monitor(
                 env, args.outdir,
                 mode='evaluation' if test else 'training')
         if args.render:
