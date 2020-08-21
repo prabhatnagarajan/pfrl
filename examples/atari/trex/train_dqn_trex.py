@@ -255,7 +255,7 @@ def main():
                              outdir=args.outdir,
                              phi=phi,
                              save_network=True)
-            env = TREXRewardEnv(env=env, trex_network=trex_reward)
+            env = TREXRewardEnv(env=env, trex_reward=trex_reward)
         if args.monitor:
             env = gym.wrappers.Monitor(
                 env, args.outdir,
