@@ -323,6 +323,7 @@ class PFRLAtariDemoParser():
         selected_scores = [sum([transition['reward'] for transition in sel_episode])
                            for sel_episode in selected_episodes]
         with open(os.path.join(self.outdir, 'misc_info.txt'), 'a') as f:
+            print("All demonstration scores: " + str(selected_scores), file=f)
             print("Worst demonstration score: " + str(min(selected_scores)), file=f)
             print("Average demonstration score: " + str(sum(selected_scores)/float(num_demos)), file=f)
             print("Best demonstration score: " + str(max(selected_scores)), file=f)
