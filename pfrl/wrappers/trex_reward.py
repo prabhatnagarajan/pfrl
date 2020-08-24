@@ -65,7 +65,7 @@ class TREXReward():
                  ranked_demos,
                  optimizer,
                  steps=30000,
-                 num_sub_trajs=12800,
+                 num_sub_trajs=6000,
                  sub_traj_len=(50,100),
                  traj_batch_size=16,
                  sample_live=True,
