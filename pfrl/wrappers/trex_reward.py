@@ -2,6 +2,7 @@ import collections
 import os
 import random
 
+import scipy
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -11,6 +12,7 @@ import numpy as np
 from pfrl.envs import MultiprocessVectorEnv
 from pfrl.utils.batch_states import batch_states
 from pfrl.wrappers import VectorFrameStack
+
 
 def subseq(seq, subseq_len, start):
     return seq[start: start + subseq_len]
@@ -215,7 +217,9 @@ class TREXRewardEnv(gym.Wrapper):
         obs = batch_states([observation], self.trex_reward.device,
                           self.trex_reward.phi)
         # Outputs a reward of a single state, so shape is (1,1)
-        inverse_reward = torch.sigmoid(self.trex_reward(obs)).cpu().numpy()[0][0]
+        inverse_reward = self.trex_reward(obs).cpu().numpy()[0][0]
+        info['pre_sigmoid_reward'] = inverse_reward
+        inverse_reward = scipy.special.expit(inverse_reward)
         info['inverse_reward'] = inverse_reward
         return observation, reward, done, info
 
