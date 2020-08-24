@@ -216,7 +216,8 @@ class TREXRewardEnv(gym.Wrapper):
                           self.trex_reward.phi)
         # Outputs a reward of a single state, so shape is (1,1)
         inverse_reward = torch.sigmoid(self.trex_reward(obs)).cpu().numpy()[0][0]
-        return observation, inverse_reward, done, info
+        info['inverse_reward'] = inverse_reward
+        return observation, reward, done, info
 
 class TREXMultiprocessRewardEnv(MultiprocessVectorEnv):
     """Environment Wrapper for neural network reward:

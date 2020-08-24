@@ -39,6 +39,7 @@ def train_agent(
     logger = logger or logging.getLogger(__name__)
 
     episode_r = 0
+    episode_inverse_reward = 0
     episode_idx = 0
 
     # o_0, r_0
@@ -57,6 +58,7 @@ def train_agent(
             # o_{t+1}, r_{t+1}
             obs, r, done, info = env.step(action)
             t += 1
+            episode_inverse_reward += info['inverse_reward']
             episode_r += r
             episode_len += 1
             reset = episode_len == max_episode_len or info.get("needs_reset", False)
@@ -67,11 +69,12 @@ def train_agent(
 
             if done or reset or t == steps:
                 logger.info(
-                    "outdir:%s step:%s episode:%s R:%s",
+                    "outdir:%s step:%s episode:%s R:%s, inverse_R:%s",
                     outdir,
                     t,
                     episode_idx,
                     episode_r,
+                    episode_inverse_reward,
                 )
                 logger.info("statistics:%s", agent.get_statistics())
                 if evaluator is not None:
@@ -85,6 +88,7 @@ def train_agent(
                     break
                 # Start a new episode
                 episode_r = 0
+                episode_inverse_reward = 0
                 episode_idx += 1
                 episode_len = 0
                 obs = env.reset()
