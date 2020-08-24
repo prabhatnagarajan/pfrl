@@ -1,15 +1,10 @@
 import argparse
 import json
-import operator
-from operator import xor
 import os
 
 
 import torch
 from torch import nn
-import chainer
-from chainer import functions as F
-from chainer import optimizers
 import gym
 import gym.wrappers
 import numpy as np
@@ -343,7 +338,7 @@ def main():
             max_episode_len=args.max_frames/4,
             logger=None)
         with open(os.path.join(args.outdir, 'bestscores.json'), 'w') as f:
-            json_stats = json.dumps(stats)
+            json_stats = json.dumps(stats, f)
         print("The results of the best scoring network:")
         for stat in stats:
             print(str(stat) + ":" + str(stats[stat]))
