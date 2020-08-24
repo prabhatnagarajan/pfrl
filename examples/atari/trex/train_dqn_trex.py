@@ -144,6 +144,10 @@ def main():
                         help='Mask when you render.')
     parser.add_argument('--trex-steps', type=int, default=30000,
                         help='Number of TREX updates.')
+    parser.add_argument('--traj-batch-size', type=int, default=16,
+                        help='Trajectory batch size')
+    parser.add_argument('--sample-live', type=bool, default=True,
+                        help='Whether or not to sample new trajectories during training')
     parser.add_argument('--demo-type', type=str,
                         choices=['agc', 'synth'], required=True)
     parser.add_argument('--load-demos', type=str,
@@ -250,6 +254,8 @@ def main():
                              gpu=args.gpu,
                              outdir=args.outdir,
                              phi=phi,
+                             traj_batch_size=args.traj_batch_size,
+                             sample_live=args.sample_live,
                              save_network=True)
             env = TREXRewardEnv(env=env, trex_reward=trex_reward)
         if args.monitor:
