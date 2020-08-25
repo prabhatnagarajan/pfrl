@@ -29,7 +29,6 @@ from pfrl.wrappers.trex_reward import TREXRewardEnv
 
 
 import demo_parser
-from pdb import set_trace
 
 def ground_truth_trajectory_comparison(trex_reward, trajectories):
     # Compute True episode scores
@@ -37,7 +36,6 @@ def ground_truth_trajectory_comparison(trex_reward, trajectories):
                       for i in range(len(episode))]) \
                       for episode in trajectories]
     print(episode_scores)
-    return None
 
 class SingleSharedBias(nn.Module):
     """Single shared bias used in the Double DQN paper.
@@ -266,8 +264,7 @@ def main():
                              sample_live=args.sample_live,
                              save_network=True)
             if train_network:
-                set_trace()
-                thing = ground_truth_trajectory_comparison(trex_reward, ranked_episodes)
+                ground_truth_trajectory_comparison(trex_reward, ranked_episodes)
             env = TREXRewardEnv(env=env, trex_reward=trex_reward)
         if args.monitor:
             env = pfrl.wrappers.Monitor(
