@@ -153,7 +153,11 @@ def main():
     parser.add_argument('--traj-batch-size', type=int, default=16,
                         help='Trajectory batch size')
     parser.add_argument('--sample-live', type=bool, default=True,
-                        help='Whether or not to sample new trajectories during training')
+                        help='Whether or not to sample new trajectories during training.')
+    parser.add_argument('--l1-lambda', type=float, default=0.0,
+                        help='L1 Lambda')
+    parser.add_argument('--l1-threshold', type=float, default=5.0,
+                        help='Value below which we do not penalize the reward output.')
     parser.add_argument('--demo-type', type=str,
                         choices=['agc', 'synth'], required=True)
     parser.add_argument('--load-demos', type=str,
@@ -262,6 +266,8 @@ def main():
                              phi=phi,
                              traj_batch_size=args.traj_batch_size,
                              sample_live=args.sample_live,
+                             l1_lambda=args.l1_lambda,
+                             l1_threshold=args.l1_threshold,
                              save_network=True)
             if train_network:
                 ground_truth_trajectory_comparison(trex_reward, ranked_episodes)

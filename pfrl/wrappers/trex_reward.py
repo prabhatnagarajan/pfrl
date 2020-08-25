@@ -18,6 +18,13 @@ def subseq(seq, subseq_len, start):
     return seq[start: start + subseq_len]
 
 
+def threshold_l1_loss(values, threshold=5.0):
+    threshold = torch.full(values.shape, threshold)
+    diff = torch.abs(values) - threshold
+    # penalize values not in range [-threshold, threshold]
+    return torch.mean(torch.max(diff, torch.full(diff.shape, 0.0)))
+
+
 class TREXArch(nn.Module):
     def __init__(self):
         super().__init__()
@@ -74,6 +81,8 @@ class TREXReward():
                  gpu=None,
                  outdir=None,
                  phi=lambda x: x,
+                 l1_lambda=0.0,
+                 l1_threshold=5.0,
                  save_network=False):
         self.ranked_demos = ranked_demos
         self.steps = steps
@@ -90,6 +99,8 @@ class TREXReward():
         self.outdir = outdir
         self.examples = []      
         self.phi = phi
+        self.l1_lambda = l1_lambda
+        self.l1_threshold = l1_threshold
         self.running_losses = collections.deque([], maxlen=10)
         if gpu is not None and gpu >= 0:
             assert torch.cuda.is_available()
@@ -170,8 +181,12 @@ class TREXReward():
         rewards_i = torch.unsqueeze(torch.stack(rewards_i), 1)
         rewards_j = torch.unsqueeze(torch.stack(rewards_j), 1)
         predictions = torch.cat((rewards_i, rewards_j), dim=1)
-        loss_func = nn.CrossEntropyLoss()
-        loss = loss_func(predictions, preprocessed['label'])
+        if self.l1_lambda != 0.0:
+            output_l1_loss = self.l1_lambda * threshold_l1_loss(predictions, self.l1_threshold)
+        else:
+            output_l1_loss = 0.0
+        cross_entropy_loss = nn.CrossEntropyLoss()
+        loss = cross_entropy_loss(predictions, preprocessed['label']) + output_l1_loss
         return loss
 
     def _train(self):
