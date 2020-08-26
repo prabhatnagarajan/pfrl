@@ -18,11 +18,13 @@ def subseq(seq, subseq_len, start):
     return seq[start: start + subseq_len]
 
 
-def threshold_l1_loss(values, threshold=5.0):
-    threshold = torch.full(values.shape, threshold)
-    diff = torch.abs(values) - threshold
+def threshold_l1_loss(values, threshold, device):
+    threshold = torch.full(values.shape, threshold, device=device)
+    abs_values = torch.abs(values)
+    diff = abs_values - threshold
     # penalize values not in range [-threshold, threshold]
-    return torch.mean(torch.max(diff, torch.full(diff.shape, 0.0)))
+    return torch.mean(torch.max(diff,
+                                torch.full(diff.shape, 0.0, device=device)))
 
 
 class TREXArch(nn.Module):
@@ -182,7 +184,7 @@ class TREXReward():
         rewards_j = torch.unsqueeze(torch.stack(rewards_j), 1)
         predictions = torch.cat((rewards_i, rewards_j), dim=1)
         if self.l1_lambda != 0.0:
-            output_l1_loss = self.l1_lambda * threshold_l1_loss(predictions, self.l1_threshold)
+            output_l1_loss = self.l1_lambda * threshold_l1_loss(predictions, self.l1_threshold, device)
         else:
             output_l1_loss = 0.0
         cross_entropy_loss = nn.CrossEntropyLoss()
@@ -236,7 +238,7 @@ class TREXRewardEnv(gym.Wrapper):
         info['pre_sigmoid_reward'] = inverse_reward
         inverse_reward = scipy.special.expit(inverse_reward)
         info['inverse_reward'] = inverse_reward
-        return observation, reward, done, info
+        return observation, inverse_reward, done, info
 
 class TREXMultiprocessRewardEnv(MultiprocessVectorEnv):
     """Environment Wrapper for neural network reward:
