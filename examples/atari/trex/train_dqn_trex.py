@@ -156,7 +156,7 @@ def main():
                         help='Whether or not to sample new trajectories during training.')
     parser.add_argument('--l1-lambda', type=float, default=0.0,
                         help='L1 Lambda')
-    parser.add_argument('--l1-threshold', type=float, default=5.0,
+    parser.add_argument('--l1-threshold', type=float, default=None,
                         help='Value below which we do not penalize the reward output.')
     parser.add_argument('--demo-type', type=str,
                         choices=['agc', 'synth'], required=True)
