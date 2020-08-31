@@ -13,7 +13,6 @@ from pfrl.envs import MultiprocessVectorEnv
 from pfrl.utils.batch_states import batch_states
 from pfrl.wrappers import VectorFrameStack
 
-
 def subseq(seq, subseq_len, start):
     return seq[start: start + subseq_len]
 
@@ -179,12 +178,15 @@ class TREXReward():
         }
         # Sum up rewards of each trajectory in the batch
         rewards_i = [torch.sum(self.trex_network(preprocessed['i'][i])) for i in range(len(preprocessed['i']))]
+        all_state_rewards = [self.trex_network(preprocessed['i'][i]) for i in range(len(preprocessed['i']))] + \
+                            [self.trex_network(preprocessed['j'][i]) for i in range(len(preprocessed['j']))]
+        individual_rewards = torch.cat(all_state_rewards, dim=0)
         rewards_j = [torch.sum(self.trex_network(preprocessed['j'][i])) for i in range(len(preprocessed['j']))]
         rewards_i = torch.unsqueeze(torch.stack(rewards_i), 1)
         rewards_j = torch.unsqueeze(torch.stack(rewards_j), 1)
         predictions = torch.cat((rewards_i, rewards_j), dim=1)
         if self.l1_lambda != 0.0:
-            output_l1_loss = self.l1_lambda * threshold_l1_loss(predictions, self.l1_threshold, device)
+            output_l1_loss = self.l1_lambda * threshold_l1_loss(individual_rewards, self.l1_threshold, device)
         else:
             output_l1_loss = 0.0
         cross_entropy_loss = nn.CrossEntropyLoss()
