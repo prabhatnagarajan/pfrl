@@ -154,9 +154,9 @@ def main():
                         help='Trajectory batch size')
     parser.add_argument('--sample-live', type=bool, default=True,
                         help='Whether or not to sample new trajectories during training.')
-    parser.add_argument('--l1-lambda', type=float, default=0.0,
+    parser.add_argument('--l1-lambda', type=float, default=0.001,
                         help='L1 Lambda')
-    parser.add_argument('--l1-threshold', type=float, default=5.0,
+    parser.add_argument('--l1-threshold', type=float, default=3.5,
                         help='Value below which we do not penalize the reward output.')
     parser.add_argument('--demo-type', type=str,
                         choices=['agc', 'synth'], required=True)
