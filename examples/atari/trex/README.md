@@ -6,6 +6,7 @@
 - show examples of frames
 - mention that atari grand challenge dataset should be downloaded
 - differences in how we select checkpointed synthetic demonstrations
+- We add the L1 thresholding loss
 
 ## How to run
 ```
