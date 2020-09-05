@@ -306,5 +306,95 @@ class TREXVectorEnv(VectorFrameStack):
         for i in range(len(rewards)):
             infos[i]["inverse_reward"] = inverse_rewards[i]
             infos[i]["true_reward"] = rewards[i]
-        return obs, rewards, dones, infos
+        return obs, inverse_rewards, dones, infos
 
+class TREXShapedRewardEnv(gym.Wrapper):
+    """Environment Wrapper for neural network reward:
+    Args:
+        env: an Env
+        trex_reward: A TREXReward
+    Attributes:
+        trex_reward: A TREXReward
+    """
+
+    def __init__(self, env,
+                 trex_reward, gamma):
+        super().__init__(env)
+        self.trex_reward = trex_reward
+        self.gamma = gamma
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        obs = batch_states([observation], self.trex_reward.device,
+                          self.trex_reward.phi)
+        # Outputs a reward of a single state, so shape is (1,1)
+        inverse_reward = self.trex_reward(obs).cpu().numpy()[0][0]
+        info['pre_sigmoid_reward'] = inverse_reward
+        inverse_reward = scipy.special.expit(inverse_reward)
+        shaped_reward = self.gamma * inverse_reward - self.prev_trex_reward
+        self.prev_trex_reward = inverse_reward
+        info["true_reward"] = reward
+        info['inverse_reward'] = inverse_reward
+        info['shaped_reward'] = shaped_reward
+
+        return observation, shaped_reward, done, info
+
+    def reset(self):
+        # TODO: make it better
+        obs = self.env.reset()
+        self.prev_trex_reward = self.trex_reward(obs).cpu().numpy()[0][0]
+        self.prev_trex_reward = scipy.special.expit(self.prev_trex_reward)
+        return obs
+
+
+class TREXShapedVectorEnv(VectorFrameStack):
+    """Environment Wrapper for vector of environments
+    to replace with a neural network reward.
+    Args:
+        env: a MultiProcessVectorEnv
+        k: Num frames to stack
+        stack_axis: axis to stack frames
+        trex_reward: A TREXReward
+    Attributes:
+        trex_reward: A TREXReward
+    """
+
+    def __init__(self, env, k, stack_axis, gamma,
+                 trex_reward):
+        super().__init__(env, k, stack_axis)
+        self.gamma = gamma
+        self.trex_reward = trex_reward
+
+    def step(self, actions):
+        batch_ob, rewards, dones, infos = self.env.step(actions)
+        for frames, ob in zip(self.frames, batch_ob):
+            frames.append(ob)
+        obs = self._get_ob()
+        processed_obs = batch_states(obs, self.trex_reward.device,
+                                     self.trex_reward.phi)
+        # Convert tensor to numpy array of shape (num_envs, 1)
+        inverse_rewards = self.trex_reward(processed_obs).cpu().numpy()
+        # Apply sigmoid
+        inverse_rewards = scipy.special.expit(inverse_rewards)
+        # Convert (num_envs, 1) array of rewards to tuple of len num_envs
+        inverse_rewards = tuple(inverse_rewards[:,0].tolist())
+
+        shaped_rewards = []
+        for env_id in range(len(rewards)):
+            shaped_rewards[env_id] = self.gamma * inverse_rewards[env_id] - self.prev_trex_rewards[env_id]
+        shaped_rewards = tuple(shaped_rewards)
+        self.prev_trex_rewards = inverse_rewards
+        for i in range(len(rewards)):
+            infos[i]["true_reward"] = rewards[i]
+            infos[i]["inverse_reward"] = inverse_rewards[i]
+            infos[i]["shaped_reward"] = shaped_rewards[i]
+        return obs, shaped_rewards, dones, infos   
+
+    def reset(self, mask=None):
+        obs = VectorFrameStack.reset(self, mask)
+        processed_obs = batch_states(obs, self.trex_reward.device,
+                                     self.trex_reward.phi)
+        inverse_rewards = self.trex_reward(processed_obs).cpu().numpy()
+        inverse_rewards = scipy.special.expit(inverse_rewards)
+        self.prev_trex_rewards = tuple(inverse_rewards[:,0].tolist())
+        return obs

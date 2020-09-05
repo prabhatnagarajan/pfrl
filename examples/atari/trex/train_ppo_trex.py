@@ -23,6 +23,7 @@ from pfrl.wrappers import score_mask_atari
 from pfrl.wrappers.trex_reward import TREXArch
 from pfrl.wrappers.trex_reward import TREXReward
 from pfrl.wrappers.trex_reward import TREXVectorEnv
+from pfrl.wrappers.trex_reward import TREXShapedVectorEnv
 
 import demo_parser
 
@@ -163,6 +164,9 @@ def main():
                         choices=['agc', 'synth'], required=True)
     parser.add_argument('--load-demos', type=str,
                         help='Atari Grand Challenge Data location or demo pickle file location.')
+    # TREX extension argument
+    parser.add_argument('--shaped-reward', type=bool, default=False)
+    parser.add_argument('--pretrain-steps', type=int, default=0)
     args = parser.parse_args()
 
     import logging
@@ -260,8 +264,12 @@ def main():
             if train_network:
                 ground_truth_trajectory_comparison(trex_reward, ranked_episodes)
 
-            vec_env = TREXVectorEnv(env=vec_env, k=4, stack_axis=0,
+            if not args.shaped_reward:
+                vec_env = TREXVectorEnv(env=vec_env, k=4, stack_axis=0,
                                     trex_reward=trex_reward)
+            else:
+                vec_env = TREXShapedVectorEnv(env=vec_env, k=4, stack_axis=0,
+                                              gamma=0.99, trex_reward=trex_reward)
         return vec_env
 
     sample_env = make_batch_env(test=False, sample=True)
