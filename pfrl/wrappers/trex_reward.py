@@ -340,7 +340,6 @@ class TREXShapedRewardEnv(gym.Wrapper):
         return observation, shaped_reward, done, info
 
     def reset(self):
-        # TODO: make it better
         observation = self.env.reset()
         obs = batch_states([observation], self.trex_reward.device,
                           self.trex_reward.phi)
@@ -383,7 +382,7 @@ class TREXShapedVectorEnv(VectorFrameStack):
 
         shaped_rewards = []
         for env_id in range(len(rewards)):
-            shaped_rewards[env_id] = self.gamma * inverse_rewards[env_id] - self.prev_trex_rewards[env_id]
+            shaped_rewards.append(self.gamma * inverse_rewards[env_id] - self.prev_trex_rewards[env_id])
         shaped_rewards = tuple(shaped_rewards)
         self.prev_trex_rewards = inverse_rewards
         for i in range(len(rewards)):
