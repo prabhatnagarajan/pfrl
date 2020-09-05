@@ -30,6 +30,7 @@ from pfrl.wrappers.trex_reward import TREXRewardEnv
 
 import demo_parser
 
+
 def ground_truth_trajectory_comparison(trex_reward, trajectories):
     # Compute True episode scores
     episode_scores = [sum([episode[i]['reward']  \

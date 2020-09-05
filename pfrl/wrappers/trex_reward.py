@@ -13,6 +13,7 @@ from pfrl.envs import MultiprocessVectorEnv
 from pfrl.utils.batch_states import batch_states
 from pfrl.wrappers import VectorFrameStack
 
+
 def subseq(seq, subseq_len, start):
     return seq[start: start + subseq_len]
 
@@ -248,7 +249,7 @@ class TREXMultiprocessRewardEnv(MultiprocessVectorEnv):
         env_fns: an Env
         trex_reward: A TREXReward
     Attributes:
-        trex_network: Reward network
+        trex_reward: A TREXReward
     """
 
     def __init__(self, env_fns,
@@ -263,9 +264,9 @@ class TREXMultiprocessRewardEnv(MultiprocessVectorEnv):
             remote.send(('step', action))
         results = [remote.recv() for remote in self.remotes]
         self.last_obs, rews, dones, infos = zip(*results)
-        obs = batch_states(self.last_obs, self.trex_network.xp,
-                          self.trex_network.phi)
-        trex_rewards = torch.sigmoid(self.trex_network(obs))
+        obs = batch_states(self.last_obs, self.trex_reward.device,
+                          self.trex_reward.phi)
+        trex_rewards = torch.sigmoid(self.trex_reward(obs))
         trex_rewards = tuple(trex_rewards.array[:,0].tolist())
         for i in range(len(rews)):
             infos[i]["true_reward"] = rews[i]
@@ -279,27 +280,31 @@ class TREXVectorEnv(VectorFrameStack):
         env: a MultiProcessVectorEnv
         k: Num frames to stack
         stack_axis: axis to stack frames
-        trex_network: A reward network
+        trex_reward: A TREXReward
     Attributes:
-        trex_network: Reward network
+        trex_reward: A TREXReward
     """
 
     def __init__(self, env, k, stack_axis,
-                 trex_network):
+                 trex_reward):
         super().__init__(env, k, stack_axis)
-        self.trex_network = trex_network
-
+        self.trex_reward = trex_reward
 
     def step(self, actions):
         batch_ob, rewards, dones, infos = self.env.step(actions)
         for frames, ob in zip(self.frames, batch_ob):
             frames.append(ob)
         obs = self._get_ob()
-        processed_obs = batch_states(obs, self.trex_network.xp,
-                                     self.trex_network.phi)
-        trex_rewards = torch.sigmoid(self.trex_network(processed_obs))
-        # convert variable([[r1],[r2], ...]) to tuple
-        trex_rewards = tuple(trex_rewards.array[:,0].tolist())
+        processed_obs = batch_states(obs, self.trex_reward.device,
+                                     self.trex_reward.phi)
+        # Convert tensor to numpy array of shape (num_envs, 1)
+        inverse_rewards = self.trex_reward(processed_obs).cpu().numpy()
+        # Apply sigmoid
+        inverse_rewards = scipy.special.expit(inverse_rewards)
+        # Convert (num_envs, 1) array of rewards to tuple of len num_envs
+        inverse_rewards = tuple(inverse_rewards[:,0].tolist())
         for i in range(len(rewards)):
+            infos[i]["inverse_reward"] = inverse_rewards[i]
             infos[i]["true_reward"] = rewards[i]
-        return obs, trex_rewards, dones, infos
+        return obs, rewards, dones, infos
+
