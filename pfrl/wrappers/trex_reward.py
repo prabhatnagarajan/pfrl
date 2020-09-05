@@ -341,10 +341,12 @@ class TREXShapedRewardEnv(gym.Wrapper):
 
     def reset(self):
         # TODO: make it better
-        obs = self.env.reset()
+        observation = self.env.reset()
+        obs = batch_states([observation], self.trex_reward.device,
+                          self.trex_reward.phi)
         self.prev_trex_reward = self.trex_reward(obs).cpu().numpy()[0][0]
         self.prev_trex_reward = scipy.special.expit(self.prev_trex_reward)
-        return obs
+        return observation
 
 
 class TREXShapedVectorEnv(VectorFrameStack):

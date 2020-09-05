@@ -154,7 +154,7 @@ def main():
                         help='Number of TREX updates.')
     parser.add_argument('--traj-batch-size', type=int, default=16,
                         help='Trajectory batch size')
-    parser.add_argument('--sample-live', type=bool, default=True,
+    parser.add_argument('--no-sample-live', action='store_true', default=False,
                         help='Whether or not to sample new trajectories during training.')
     parser.add_argument('--l1-lambda', type=float, default=0.001,
                         help='L1 Lambda')
@@ -165,7 +165,7 @@ def main():
     parser.add_argument('--load-demos', type=str,
                         help='Atari Grand Challenge Data location or demo pickle file location.')
     # TREX extension argument
-    parser.add_argument('--shaped-reward', type=bool, default=False)
+    parser.add_argument('--shaped-reward', action='store_true', default=False)
     parser.add_argument('--pretrain-steps', type=int, default=0)
     args = parser.parse_args()
 
@@ -270,7 +270,7 @@ def main():
                              outdir=args.outdir,
                              phi=phi,
                              traj_batch_size=args.traj_batch_size,
-                             sample_live=args.sample_live,
+                             sample_live=not args.no_sample_live,
                              l1_lambda=args.l1_lambda,
                              l1_threshold=args.l1_threshold,
                              save_network=True)
