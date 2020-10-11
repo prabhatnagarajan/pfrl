@@ -1,19 +1,20 @@
 import argparse
+from collections import deque
 
 import gym
 import gym.spaces as spaces
-import torch.nn as nn
 import numpy as np
+import torch
+import torch.nn as nn
 
 import pfrl
-from pfrl.q_functions import DiscreteActionValueHead
-from pfrl import agents
-from pfrl import experiments
-from pfrl import explorers
-from pfrl import utils
-from pfrl import replay_buffers
-
+from pfrl import agents, experiments, replay_buffers, utils
 from pfrl.initializers import init_chainer_default
+from pfrl.q_functions import DiscreteActionValueHead
+
+
+def reward_fn(dg, ag):
+    return -1.0 if (ag != dg).any() else 0.0
 
 
 class BitFlip(gym.GoalEnv):
@@ -23,41 +24,53 @@ class BitFlip(gym.GoalEnv):
         n: State space is {0,1}^n
     """
 
+    observation: dict
+
     def __init__(self, n):
         self.n = n
         self.steps = 0
         self.action_space = spaces.Discrete(n)
-        self.observation_space = spaces.Dict(dict(
-            desired_goal=spaces.MultiBinary(n),
-            achieved_goal=spaces.MultiBinary(n),
-            observation=spaces.MultiBinary(n),
-        ))
-
-    def compute_reward(self, achieved_goal, desired_goal, info):
-        return -1.0 if (achieved_goal != desired_goal).any() else 0.0
+        self.observation_space = spaces.Dict(
+            dict(
+                desired_goal=spaces.MultiBinary(n),
+                achieved_goal=spaces.MultiBinary(n),
+                observation=spaces.MultiBinary(n),
+            )
+        )
 
     def step(self, action):
-        self.observation["observation"][action] = \
-            int(not self.observation["observation"][action])
-        reward = self.compute_reward(self.observation["achieved_goal"],
-                                     self.observation["desired_goal"], {})
-        done = (self.observation["desired_goal"] == \
-            self.observation["achieved_goal"]).all()
-        self.steps += 1
-        if self.steps == self.n:
+        desired_goal = self.observation["desired_goal"].copy()
+        before = self.observation["observation"][action]
+        new_bit = int(not before)
+        new_state = self.observation["observation"].copy()
+        new_state[action] = new_bit
+        self.observation = {
+            "desired_goal": desired_goal,
+            "achieved_goal": new_state,
+            "observation": new_state,
+        }
+        reward = reward_fn(new_state, desired_goal)
+        done = (new_state == desired_goal).all()
+        if done:
+            assert reward == 0.0
+        # Run out of moves
+        if self.steps == (self.n + 1):
             done = True
+        self.steps += 1
         return self.observation, reward, done, {}
 
     def reset(self):
         sample_obs = self.observation_space.sample()
-        state, goal = sample_obs['observation'], sample_obs['desired_goal']
+        state, goal = sample_obs["observation"], sample_obs["desired_goal"]
+        # Generate state/goal pairs until they're distinct
         while (state == goal).all():
             sample_obs = self.observation_space.sample()
-            state, goal = sample_obs['observation'], sample_obs['desired_goal']
-        self.observation = dict()
-        self.observation["desired_goal"] = goal
-        self.observation["achieved_goal"] = state
-        self.observation["observation"] = state
+            state, goal = sample_obs["observation"], sample_obs["desired_goal"]
+        self.observation = {
+            "desired_goal": goal,
+            "achieved_goal": state,
+            "observation": state,
+        }
         self.steps = 0
         return self.observation
 
@@ -75,15 +88,21 @@ def main():
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed [0, 2 ** 31)")
     parser.add_argument(
-        "--gpu", type=int, default=0, help="GPU to use, set to -1 if no GPU."
+        "--gpu", type=int, default=-1, help="GPU to use, set to -1 if no GPU."
     )
     parser.add_argument("--demo", action="store_true", default=False)
     parser.add_argument("--load", type=str, default=None)
     parser.add_argument(
         "--log-level",
         type=int,
-        default=20,
+        default=30,
         help="Logging level. 10:DEBUG, 20:INFO etc.",
+    )
+    parser.add_argument(
+        "--num-bits",
+        type=int,
+        default=16,
+        help="Total number of bits in the env.",
     )
     parser.add_argument(
         "--steps",
@@ -94,14 +113,8 @@ def main():
     parser.add_argument(
         "--replay-start-size",
         type=int,
-        default=5 * 10 ** 4,
+        default=5 * 100,
         help="Minimum replay buffer size before " + "performing gradient updates.",
-    )
-    parser.add_argument(
-        "--num-bits",
-        type=int,
-        default=10,
-        help="Number of bits for BitFlipping environment",
     )
     parser.add_argument("--use-hindsight", type=bool, default=True)
     parser.add_argument("--eval-n-episodes", type=int, default=100)
@@ -141,42 +154,32 @@ def main():
         DiscreteActionValueHead(),
     )
 
-    # Use the same hyperparameters as the Nature paper
-    opt = pfrl.optimizers.RMSpropEpsInsideSqrt(
-        q_func.parameters(),
-        lr=2.5e-4,
-        alpha=0.95,
-        momentum=0.0,
-        eps=1e-2,
-        centered=True,
-    )
-
-    def reward_fn(dg, ag):
-        return -1.0 if (ag != dg).any() else 0.0
+    opt = torch.optim.Adam(q_func.parameters(), eps=1e-3)
 
     if args.use_hindsight:
         rbuf = replay_buffers.hindsight.HindsightReplayBuffer(
             reward_fn=reward_fn,
             replay_strategy=replay_buffers.hindsight.ReplayFutureGoal(),
-            capacity=10 ** 6
-            )
+            capacity=10 ** 6,
+        )
     else:
         rbuf = replay_buffers.ReplayBuffer(10 ** 6)
 
-    explorer = explorers.LinearDecayEpsilonGreedy(
-        start_epsilon=1.0,
-        end_epsilon=0.1,
-        decay_steps=10 ** 6,
-        random_action_func=lambda: np.random.randint(n_actions),
+    # Decaying exploration is important in order to converge at 1.0 success rate
+    explorer = pfrl.explorers.LinearDecayEpsilonGreedy(
+        start_epsilon=0.3,
+        end_epsilon=0.0,
+        decay_steps=5000,
+        random_action_func=env.action_space.sample,
     )
 
     def phi(observation):
         # Feature extractor
-        obs = np.asarray(observation["observation"], dtype=np.float32) / 255
-        dg = np.asarray(observation["desired_goal"], dtype=np.float32) / 255
+        obs = np.asarray(observation["observation"], dtype=np.float32)
+        dg = np.asarray(observation["desired_goal"], dtype=np.float32)
         return np.concatenate((obs, dg))
 
-    Agent = agents.DQN
+    Agent = agents.DoubleDQN
     agent = Agent(
         q_func,
         opt,
@@ -185,7 +188,7 @@ def main():
         gamma=0.99,
         explorer=explorer,
         replay_start_size=args.replay_start_size,
-        target_update_interval=10 ** 4,
+        target_update_interval=10 ** 3,
         clip_delta=True,
         update_interval=4,
         batch_accumulator="sum",
@@ -195,6 +198,22 @@ def main():
     if args.load:
         agent.load(args.load)
 
+    wins_window = deque(maxlen=100)
+    total_rewards_window = deque(maxlen=100)
+
+    def episode_summary(env, agent, episode_idx, total_reward, last_reward, statistics):
+        nonlocal wins_window, total_rewards_window
+        wins_window.append(last_reward)
+        total_rewards_window.append(total_reward)
+        total_rewards_window.append(np.mean(total_rewards_window))
+        success_rate = (len(wins_window) - abs(np.sum(wins_window))) / len(wins_window)
+        msg = "\rEpisode {}\tAverage Score: {:.2f} \tSuccess Rate: {:.2f}".format(
+            episode_idx, np.mean(total_rewards_window), success_rate
+        )
+        if episode_idx % 100 == 0:
+            print(msg)
+        else:
+            print(msg, end="")
 
     if args.demo:
         eval_stats = experiments.eval_performance(
@@ -219,6 +238,7 @@ def main():
             outdir=args.outdir,
             save_best_so_far_agent=True,
             eval_env=eval_env,
+            episode_hooks=(episode_summary,),
         )
 
 
