@@ -33,6 +33,7 @@ def train_agent(
     evaluator=None,
     successful_score=None,
     step_hooks=(),
+    episode_hooks=(),
     logger=None,
 ):
 
@@ -73,7 +74,10 @@ def train_agent(
                     episode_idx,
                     episode_r,
                 )
-                logger.info("statistics:%s", agent.get_statistics())
+                stats = agent.get_statistics()
+                for hook in episode_hooks:
+                    hook(env, agent, episode_idx, episode_r, r, stats)
+                logger.info("statistics:%s", stats)
                 if evaluator is not None:
                     evaluator.evaluate_if_necessary(t=t, episodes=episode_idx + 1)
                     if (
@@ -115,6 +119,7 @@ def train_agent_with_evaluation(
     eval_env=None,
     successful_score=None,
     step_hooks=(),
+    episode_hooks=(),
     save_best_so_far_agent=True,
     use_tensorboard=False,
     logger=None,
@@ -140,6 +145,9 @@ def train_agent_with_evaluation(
         step_hooks (Sequence): Sequence of callable objects that accepts
             (env, agent, step) as arguments. They are called every step.
             See pfrl.experiments.hooks.
+        episode_hooks (Sequence): Sequence of callable objects that accepts
+            (env, agent, episode_reward, last_reward, statistics) as arguments.
+            They are called at the end of each episode.
         save_best_so_far_agent (bool): If set to True, after each evaluation
             phase, if the score (= mean return of evaluation episodes) exceeds
             the best-so-far score, the current agent is saved.
@@ -182,5 +190,6 @@ def train_agent_with_evaluation(
         evaluator=evaluator,
         successful_score=successful_score,
         step_hooks=step_hooks,
+        episode_hooks=episode_hooks,
         logger=logger,
     )
