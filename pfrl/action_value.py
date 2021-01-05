@@ -1,7 +1,5 @@
-from abc import ABCMeta
-from abc import abstractmethod
-from abc import abstractproperty
 import warnings
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 import torch
 import torch.nn.functional as F
@@ -36,6 +34,10 @@ class ActionValue(object, metaclass=ABCMeta):
         Returns:
             tuple of torch.Tensor
         """
+        raise NotImplementedError()
+
+    def __getitem__(self, i) -> "ActionValue":
+        """ActionValue is expected to be indexable."""
         raise NotImplementedError()
 
 

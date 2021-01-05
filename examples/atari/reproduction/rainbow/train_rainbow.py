@@ -2,17 +2,14 @@ import argparse
 import json
 import os
 
-import torch
 import numpy as np
+import torch
 
 import pfrl
-from pfrl import agents
-from pfrl import experiments
-from pfrl import explorers
+from pfrl import agents, experiments, explorers
 from pfrl import nn as pnn
-from pfrl import utils
+from pfrl import replay_buffers, utils
 from pfrl.q_functions import DistributionalDuelingDQN
-from pfrl import replay_buffers
 from pfrl.wrappers import atari_wrappers
 
 
@@ -120,7 +117,7 @@ def main():
     # Turn off explorer
     explorer = explorers.Greedy()
 
-    # Use the same hyper parameters as https://arxiv.org/abs/1707.06887
+    # Use the same hyper parameters as https://arxiv.org/abs/1710.02298
     opt = torch.optim.Adam(q_func.parameters(), 6.25e-5, eps=1.5 * 10 ** -4)
 
     # Prioritized Replay
@@ -157,8 +154,6 @@ def main():
     )
 
     if args.load or args.load_pretrained:
-        if args.load_pretrained:
-            raise Exception("Pretrained models are currently unsupported.")
         # either load_ or load_pretrained must be false
         assert not args.load or not args.load_pretrained
         if args.load:

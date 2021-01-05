@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
-from pfrl.initializers import init_chainer_default
-from pfrl.initializers import init_lecun_normal
+
+from pfrl.initializers import init_chainer_default, init_lecun_normal
 
 
 class MLP(nn.Module):
@@ -31,6 +31,6 @@ class MLP(nn.Module):
     def forward(self, x):
         h = x
         if self.hidden_sizes:
-            for l in self.hidden_layers:
-                h = self.nonlinearity(l(h))
+            for layer in self.hidden_layers:
+                h = self.nonlinearity(layer(h))
         return self.output(h)

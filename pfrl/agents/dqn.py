@@ -1,35 +1,50 @@
-import copy
 import collections
-import time
+import copy
 import ctypes
 import multiprocessing as mp
-from logging import getLogger
+import multiprocessing.synchronize
+import time
+from logging import Logger, getLogger
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 import pfrl
 from pfrl import agent
+from pfrl.action_value import ActionValue
+from pfrl.explorer import Explorer
+from pfrl.replay_buffer import (
+    AbstractEpisodicReplayBuffer,
+    ReplayUpdater,
+    batch_experiences,
+    batch_recurrent_experiences,
+)
+from pfrl.replay_buffers import PrioritizedReplayBuffer
 from pfrl.utils.batch_states import batch_states
 from pfrl.utils.contexts import evaluating
 from pfrl.utils.copy_param import synchronize_parameters
-from pfrl.replay_buffer import batch_experiences
-from pfrl.replay_buffer import batch_recurrent_experiences
-from pfrl.replay_buffer import ReplayUpdater
-from pfrl.utils.recurrent import get_recurrent_state_at
-from pfrl.utils.recurrent import mask_recurrent_state_at
-from pfrl.utils.recurrent import one_step_forward
-from pfrl.utils.recurrent import pack_and_forward
-from pfrl.utils.recurrent import recurrent_state_as_numpy
+from pfrl.utils.recurrent import (
+    get_recurrent_state_at,
+    mask_recurrent_state_at,
+    one_step_forward,
+    pack_and_forward,
+    recurrent_state_as_numpy,
+)
 
 
-def _mean_or_nan(xs):
+def _mean_or_nan(xs: Sequence[float]) -> float:
     """Return its mean a non-empty sequence, numpy.nan for a empty one."""
     return np.mean(xs) if xs else np.nan
 
 
-def compute_value_loss(y, t, clip_delta=True, batch_accumulator="mean"):
+def compute_value_loss(
+    y: torch.Tensor,
+    t: torch.Tensor,
+    clip_delta: bool = True,
+    batch_accumulator: str = "mean",
+) -> torch.Tensor:
     """Compute a loss for value prediction problem.
 
     Args:
@@ -51,8 +66,12 @@ def compute_value_loss(y, t, clip_delta=True, batch_accumulator="mean"):
 
 
 def compute_weighted_value_loss(
-    y, t, weights, clip_delta=True, batch_accumulator="mean"
-):
+    y: torch.Tensor,
+    t: torch.Tensor,
+    weights: torch.Tensor,
+    clip_delta: bool = True,
+    batch_accumulator: str = "mean",
+) -> torch.Tensor:
     """Compute a loss for value prediction problem.
 
     Args:
@@ -82,8 +101,8 @@ def compute_weighted_value_loss(
 
 
 def _batch_reset_recurrent_states_when_episodes_end(
-    batch_done, batch_reset, recurrent_states
-):
+    batch_done: Sequence[bool], batch_reset: Sequence[bool], recurrent_states: Any
+) -> Any:
     """Reset recurrent states when episodes end.
 
     Args:
@@ -103,6 +122,21 @@ def _batch_reset_recurrent_states_when_episodes_end(
         return mask_recurrent_state_at(recurrent_states, indices_that_ended)
     else:
         return recurrent_states
+
+
+def make_target_model_as_copy(model: torch.nn.Module) -> torch.nn.Module:
+    target_model = copy.deepcopy(model)
+
+    def flatten_parameters(mod):
+        if isinstance(mod, torch.nn.RNNBase):
+            mod.flatten_parameters()
+
+    # RNNBase.flatten_parameters must be called again after deep-copy.
+    # See: https://discuss.pytorch.org/t/why-do-we-need-flatten-parameters-when-using-rnn-with-dataparallel/46506  # NOQA
+    target_model.apply(flatten_parameters)
+    # set target n/w to evaluate only.
+    target_model.eval()
+    return target_model
 
 
 class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
@@ -142,27 +176,29 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
 
     def __init__(
         self,
-        q_function,
-        optimizer,
-        replay_buffer,
-        gamma,
-        explorer,
-        gpu=None,
-        replay_start_size=50000,
-        minibatch_size=32,
-        update_interval=1,
-        target_update_interval=10000,
-        clip_delta=True,
-        phi=lambda x: x,
-        target_update_method="hard",
-        soft_update_tau=1e-2,
-        n_times_update=1,
-        batch_accumulator="mean",
-        episodic_update_len=None,
-        logger=getLogger(__name__),
-        batch_states=batch_states,
-        recurrent=False,
-        max_grad_norm=None,
+        q_function: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,  # type: ignore  # somehow mypy complains
+        replay_buffer: pfrl.replay_buffer.AbstractReplayBuffer,
+        gamma: float,
+        explorer: Explorer,
+        gpu: Optional[int] = None,
+        replay_start_size: int = 50000,
+        minibatch_size: int = 32,
+        update_interval: int = 1,
+        target_update_interval: int = 10000,
+        clip_delta: bool = True,
+        phi: Callable[[Any], Any] = lambda x: x,
+        target_update_method: str = "hard",
+        soft_update_tau: float = 1e-2,
+        n_times_update: int = 1,
+        batch_accumulator: str = "mean",
+        episodic_update_len: Optional[int] = None,
+        logger: Logger = getLogger(__name__),
+        batch_states: Callable[
+            [Sequence[Any], torch.device, Callable[[Any], Any]], Any
+        ] = batch_states,
+        recurrent: bool = False,
+        max_grad_norm: Optional[float] = None,
     ):
         self.model = q_function
 
@@ -188,7 +224,9 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
         self.logger = logger
         self.batch_states = batch_states
         self.recurrent = recurrent
+        update_func: Callable[..., None]
         if self.recurrent:
+            assert isinstance(self.replay_buffer, AbstractEpisodicReplayBuffer)
             update_func = self.update_from_episodes
         else:
             update_func = self.update
@@ -215,19 +253,16 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
         self.t = 0
         self.optim_t = 0  # Compensate pytorch optim not having `t`
         self._cumulative_steps = 0
-        self.last_state = None
-        self.last_action = None
-        self.target_model = None
-        self.sync_target_network()
+        self.target_model = make_target_model_as_copy(self.model)
 
         # Statistics
-        self.q_record = collections.deque(maxlen=1000)
-        self.loss_record = collections.deque(maxlen=100)
+        self.q_record: collections.deque = collections.deque(maxlen=1000)
+        self.loss_record: collections.deque = collections.deque(maxlen=100)
 
         # Recurrent states of the model
-        self.train_recurrent_states = None
-        self.train_prev_recurrent_states = None
-        self.test_recurrent_states = None
+        self.train_recurrent_states: Any = None
+        self.train_prev_recurrent_states: Any = None
+        self.test_recurrent_states: Any = None
 
         # Error checking
         if (
@@ -237,13 +272,17 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
             raise ValueError("Replay start size cannot exceed replay buffer capacity.")
 
     @property
-    def cumulative_steps(self):
+    def cumulative_steps(self) -> int:
         # cumulative_steps counts the overall steps during the training.
         return self._cumulative_steps
 
     def _setup_actor_learner_training(
-        self, n_actors, actor_update_interval, update_counter
-    ):
+        self, n_actors: int, actor_update_interval: int, update_counter: Any,
+    ) -> Tuple[
+        torch.nn.Module,
+        Sequence[mp.connection.Connection],
+        Sequence[mp.connection.Connection],
+    ]:
         assert actor_update_interval > 0
 
         self.actor_update_interval = actor_update_interval
@@ -258,29 +297,18 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
 
         return (shared_model, learner_pipes, actor_pipes)
 
-    def sync_target_network(self):
+    def sync_target_network(self) -> None:
         """Synchronize target network with current network."""
-        if self.target_model is None:
-            self.target_model = copy.deepcopy(self.model)
+        synchronize_parameters(
+            src=self.model,
+            dst=self.target_model,
+            method=self.target_update_method,
+            tau=self.soft_update_tau,
+        )
 
-            def flatten_parameters(mod):
-                if isinstance(mod, torch.nn.RNNBase):
-                    mod.flatten_parameters()
-
-            # RNNBase.flatten_parameters must be called again after deep-copy.
-            # See: https://discuss.pytorch.org/t/why-do-we-need-flatten-parameters-when-using-rnn-with-dataparallel/46506  # NOQA
-            self.target_model.apply(flatten_parameters)
-            # set target n/w to evaluate only.
-            self.target_model.eval()
-        else:
-            synchronize_parameters(
-                src=self.model,
-                dst=self.target_model,
-                method=self.target_update_method,
-                tau=self.soft_update_tau,
-            )
-
-    def update(self, experiences, errors_out=None):
+    def update(
+        self, experiences: List[List[Dict[str, Any]]], errors_out: Optional[list] = None
+    ) -> None:
         """Update the model from experiences
 
         Args:
@@ -317,6 +345,7 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 errors_out = []
         loss = self._compute_loss(exp_batch, errors_out=errors_out)
         if has_weight:
+            assert isinstance(self.replay_buffer, PrioritizedReplayBuffer)
             self.replay_buffer.update_errors(errors_out)
 
         self.loss_record.append(float(loss.detach().cpu().numpy()))
@@ -328,7 +357,9 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
         self.optimizer.step()
         self.optim_t += 1
 
-    def update_from_episodes(self, episodes, errors_out=None):
+    def update_from_episodes(
+        self, episodes: List[List[Dict[str, Any]]], errors_out: Optional[list] = None
+    ) -> None:
         assert errors_out is None, "Recurrent DQN does not support PrioritizedBuffer"
         episodes = sorted(episodes, key=len, reverse=True)
         exp_batch = batch_recurrent_experiences(
@@ -347,7 +378,7 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
         self.optimizer.step()
         self.optim_t += 1
 
-    def _compute_target_values(self, exp_batch):
+    def _compute_target_values(self, exp_batch: Dict[str, Any]) -> torch.Tensor:
         batch_next_state = exp_batch["next_state"]
 
         if self.recurrent:
@@ -364,7 +395,9 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
 
         return batch_rewards + discount * (1.0 - batch_terminal) * next_q_max
 
-    def _compute_y_and_t(self, exp_batch):
+    def _compute_y_and_t(
+        self, exp_batch: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = exp_batch["reward"].shape[0]
 
         # Compute Q-values for current states
@@ -387,7 +420,9 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
 
         return batch_q, batch_q_target
 
-    def _compute_loss(self, exp_batch, errors_out=None):
+    def _compute_loss(
+        self, exp_batch: Dict[str, Any], errors_out: Optional[list] = None
+    ) -> torch.Tensor:
         """Compute the Q-learning loss for a batch of experiences
 
 
@@ -425,7 +460,9 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 batch_accumulator=self.batch_accumulator,
             )
 
-    def _evaluate_model_and_update_recurrent_states(self, batch_obs):
+    def _evaluate_model_and_update_recurrent_states(
+        self, batch_obs: Sequence[Any]
+    ) -> ActionValue:
         batch_xs = self.batch_states(batch_obs, self.device, self.phi)
         if self.recurrent:
             if self.training:
@@ -441,10 +478,10 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
             batch_av = self.model(batch_xs)
         return batch_av
 
-    def batch_act(self, batch_obs):
+    def batch_act(self, batch_obs: Sequence[Any]) -> Sequence[Any]:
         with torch.no_grad(), evaluating(self.model):
             batch_av = self._evaluate_model_and_update_recurrent_states(batch_obs)
-            batch_argmax = batch_av.greedy_actions.cpu().numpy()
+            batch_argmax = batch_av.greedy_actions.detach().cpu().numpy()
         if self.training:
             batch_action = [
                 self.explorer.select_action(
@@ -458,7 +495,13 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
             batch_action = batch_argmax
         return batch_action
 
-    def _batch_observe_train(self, batch_obs, batch_reward, batch_done, batch_reset):
+    def _batch_observe_train(
+        self,
+        batch_obs: Sequence[Any],
+        batch_reward: Sequence[float],
+        batch_done: Sequence[bool],
+        batch_reset: Sequence[bool],
+    ) -> None:
 
         for i in range(len(batch_obs)):
             self.t += 1
@@ -504,7 +547,13 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 recurrent_states=self.train_recurrent_states,
             )
 
-    def _batch_observe_eval(self, batch_obs, batch_reward, batch_done, batch_reset):
+    def _batch_observe_eval(
+        self,
+        batch_obs: Sequence[Any],
+        batch_reward: Sequence[float],
+        batch_done: Sequence[bool],
+        batch_reset: Sequence[bool],
+    ) -> None:
         if self.recurrent:
             # Reset recurrent states when episodes end
             self.test_recurrent_states = _batch_reset_recurrent_states_when_episodes_end(  # NOQA
@@ -513,7 +562,13 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 recurrent_states=self.test_recurrent_states,
             )
 
-    def batch_observe(self, batch_obs, batch_reward, batch_done, batch_reset):
+    def batch_observe(
+        self,
+        batch_obs: Sequence[Any],
+        batch_reward: Sequence[float],
+        batch_done: Sequence[bool],
+        batch_reset: Sequence[bool],
+    ) -> None:
         if self.training:
             return self._batch_observe_train(
                 batch_obs, batch_reward, batch_done, batch_reset
@@ -523,14 +578,22 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 batch_obs, batch_reward, batch_done, batch_reset
             )
 
-    def _can_start_replay(self):
+    def _can_start_replay(self) -> bool:
         if len(self.replay_buffer) < self.replay_start_size:
             return False
-        if self.recurrent and self.replay_buffer.n_episodes < self.minibatch_size:
-            return False
+        if self.recurrent:
+            assert isinstance(self.replay_buffer, AbstractEpisodicReplayBuffer)
+            if self.replay_buffer.n_episodes < self.minibatch_size:
+                return False
         return True
 
-    def _poll_pipe(self, actor_idx, pipe, replay_buffer_lock, exception_event):
+    def _poll_pipe(
+        self,
+        actor_idx: int,
+        pipe: mp.connection.Connection,
+        replay_buffer_lock: mp.synchronize.Lock,
+        exception_event: mp.synchronize.Event,
+    ) -> None:
         if pipe.closed:
             return
         try:
@@ -570,13 +633,15 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
 
     def _learner_loop(
         self,
-        shared_model,
-        pipes,
-        replay_buffer_lock,
-        stop_event,
-        exception_event,
-        n_updates=None,
-    ):
+        shared_model: torch.nn.Module,
+        pipes: Sequence[mp.connection.Connection],
+        replay_buffer_lock: mp.synchronize.Lock,
+        stop_event: mp.synchronize.Event,
+        exception_event: mp.synchronize.Event,
+        n_updates: Optional[int] = None,
+        step_hooks: List[Callable[[None, agent.Agent, int], Any]] = [],
+        optimizer_step_hooks: List[Callable[[None, agent.Agent, int], Any]] = [],
+    ) -> None:
         try:
             update_counter = 0
             # To stop this loop, call stop_event.set()
@@ -591,6 +656,7 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                         break
 
                 if self.recurrent:
+                    assert isinstance(self.replay_buffer, AbstractEpisodicReplayBuffer)
                     with replay_buffer_lock:
                         episodes = self.replay_buffer.sample_episodes(
                             self.minibatch_size, self.episodic_update_len
@@ -599,6 +665,7 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 else:
                     with replay_buffer_lock:
                         transitions = self.replay_buffer.sample(self.minibatch_size)
+
                     self.update(transitions)
 
                 # Update the shared model. This can be expensive if GPU is used
@@ -617,6 +684,13 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 # We can safely assign self.t since in the learner
                 # it isn't updated by any other method
                 self.t = effective_timestep
+
+                for hook in optimizer_step_hooks:
+                    hook(None, self, self.optim_t)
+
+                for hook in step_hooks:
+                    hook(None, self, effective_timestep)
+
                 if effective_timestep % self.target_update_interval == 0:
                     self.sync_target_network()
         except Exception:
@@ -624,8 +698,13 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
             exception_event.set()
 
     def _poller_loop(
-        self, shared_model, pipes, replay_buffer_lock, stop_event, exception_event
-    ):
+        self,
+        shared_model: torch.nn.Module,
+        pipes: Sequence[mp.connection.Connection],
+        replay_buffer_lock: mp.synchronize.Lock,
+        stop_event: mp.synchronize.Event,
+        exception_event: mp.synchronize.Event,
+    ) -> None:
         # To stop this loop, call stop_event.set()
         while not stop_event.is_set() and not exception_event.is_set():
             time.sleep(1e-6)
@@ -634,7 +713,13 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 self._poll_pipe(i, pipe, replay_buffer_lock, exception_event)
 
     def setup_actor_learner_training(
-        self, n_actors, update_counter=None, n_updates=None, actor_update_interval=8
+        self,
+        n_actors: int,
+        update_counter: Optional[Any] = None,
+        n_updates: Optional[int] = None,
+        actor_update_interval: int = 8,
+        step_hooks: List[Callable[[None, agent.Agent, int], Any]] = [],
+        optimizer_step_hooks: List[Callable[[None, agent.Agent, int], Any]] = [],
     ):
         if update_counter is None:
             update_counter = mp.Value(ctypes.c_ulong)
@@ -680,13 +765,15 @@ class DQN(agent.AttributeSavingMixin, agent.BatchAgent):
                 stop_event=learner_stop_event,
                 n_updates=n_updates,
                 exception_event=exception_event,
+                step_hooks=step_hooks,
+                optimizer_step_hooks=optimizer_step_hooks,
             ),
             stop_event=learner_stop_event,
         )
 
         return make_actor, learner, poller, exception_event
 
-    def stop_episode(self):
+    def stop_episode(self) -> None:
         if self.recurrent:
             self.test_recurrent_states = None
 

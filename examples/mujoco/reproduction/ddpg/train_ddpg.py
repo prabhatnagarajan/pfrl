@@ -15,13 +15,9 @@ import torch
 from torch import nn
 
 import pfrl
+from pfrl import experiments, explorers, replay_buffers, utils
 from pfrl.agents.ddpg import DDPG
-from pfrl import experiments
-from pfrl import explorers
-from pfrl import utils
-from pfrl import replay_buffers
-from pfrl.nn import ConcatObsAndAction
-from pfrl.nn import BoundByTanh
+from pfrl.nn import BoundByTanh, ConcatObsAndAction
 from pfrl.policies import DeterministicHead
 
 
@@ -179,8 +175,6 @@ def main():
     )
 
     if len(args.load) > 0 or args.load_pretrained:
-        if args.load_pretrained:
-            raise Exception("Pretrained models are currently unsupported.")
         # either load or load_pretrained must be false
         assert not len(args.load) > 0 or not args.load_pretrained
         if len(args.load) > 0:
@@ -209,6 +203,11 @@ def main():
                 eval_stats["stdev"],
             )
         )
+        import json
+        import os
+
+        with open(os.path.join(args.outdir, "demo_scores.json"), "w") as f:
+            json.dump(eval_stats, f)
     else:
         experiments.train_agent_with_evaluation(
             agent=agent,

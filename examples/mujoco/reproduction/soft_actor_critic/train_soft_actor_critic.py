@@ -4,23 +4,20 @@ This script follows the settings of https://arxiv.org/abs/1812.05905 as much
 as possible.
 """
 import argparse
-from distutils.version import LooseVersion
 import functools
 import logging
 import sys
+from distutils.version import LooseVersion
 
-import torch
-from torch import nn
-from torch import distributions
 import gym
 import gym.wrappers
 import numpy as np
+import torch
+from torch import distributions, nn
 
 import pfrl
-from pfrl import experiments
+from pfrl import experiments, replay_buffers, utils
 from pfrl.nn.lmbda import Lambda
-from pfrl import utils
-from pfrl import replay_buffers
 
 
 def main():
@@ -229,8 +226,6 @@ def main():
     )
 
     if len(args.load) > 0 or args.load_pretrained:
-        if args.load_pretrained:
-            raise Exception("Pretrained models are currently unsupported.")
         # either load or load_pretrained must be false
         assert not len(args.load) > 0 or not args.load_pretrained
         if len(args.load) > 0:
@@ -258,6 +253,11 @@ def main():
                 eval_stats["stdev"],
             )
         )
+        import json
+        import os
+
+        with open(os.path.join(args.outdir, "demo_scores.json"), "w") as f:
+            json.dump(eval_stats, f)
     else:
         experiments.train_agent_batch_with_evaluation(
             agent=agent,

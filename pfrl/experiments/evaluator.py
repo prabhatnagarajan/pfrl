@@ -9,29 +9,6 @@ import numpy as np
 import pfrl
 
 
-"""Columns that describe information about an experiment.
-
-steps: number of time steps taken (= number of actions taken)
-episodes: number of episodes finished
-elapsed: time elapsed so far (seconds)
-mean: mean of returns of evaluation runs
-median: median of returns of evaluation runs
-stdev: stdev of returns of evaluation runs
-max: maximum value of returns of evaluation runs
-min: minimum value of returns of evaluation runs
-"""
-_basic_columns = (
-    "steps",
-    "episodes",
-    "elapsed",
-    "mean",
-    "median",
-    "stdev",
-    "max",
-    "min",
-)
-
-
 def _run_episodes(
     env, agent, n_steps, n_episodes, max_episode_len=None, logger=None,
 ):
@@ -323,11 +300,14 @@ def create_tb_writer(outdir):
     return tb_writer
 
 
-def record_tb_stats(summary_writer, agent_stats, eval_stats, t):
+def record_tb_stats(summary_writer, agent_stats, eval_stats, env_stats, t):
     cur_time = time.time()
 
     for stat, value in agent_stats:
         summary_writer.add_scalar("agent/" + stat, value, t, cur_time)
+
+    for stat, value in env_stats:
+        summary_writer.add_scalar("env/" + stat, value, t, cur_time)
 
     for stat in ("mean", "median", "max", "min", "stdev"):
         value = eval_stats[stat]
@@ -344,10 +324,40 @@ def record_tb_stats(summary_writer, agent_stats, eval_stats, t):
     summary_writer.flush()
 
 
+def record_tb_stats_loop(outdir, queue, stop_event):
+    tb_writer = create_tb_writer(outdir)
+
+    while not (stop_event.wait(1e-6) and queue.empty()):
+        if not queue.empty():
+            agent_stats, eval_stats, env_stats, t = queue.get()
+            record_tb_stats(tb_writer, agent_stats, eval_stats, env_stats, t)
+
+
 def save_agent(agent, t, outdir, logger, suffix=""):
     dirname = os.path.join(outdir, "{}{}".format(t, suffix))
     agent.save(dirname)
     logger.info("Saved the agent to %s", dirname)
+
+
+def write_header(outdir, agent, env):
+    # Columns that describe information about an experiment.
+    basic_columns = (
+        "steps",  # number of time steps taken (= number of actions taken)
+        "episodes",  # number of episodes finished
+        "elapsed",  # time elapsed so far (seconds)
+        "mean",  # mean of returns of evaluation runs
+        "median",  # median of returns of evaluation runs
+        "stdev",  # stdev of returns of evaluation runs
+        "max",  # maximum value of returns of evaluation runs
+        "min",  # minimum value of returns of evaluation runs
+    )
+    with open(os.path.join(outdir, "scores.txt"), "w") as f:
+        custom_columns = tuple(t[0] for t in agent.get_statistics())
+        env_get_stats = getattr(env, "get_statistics", lambda: [])
+        assert callable(env_get_stats)
+        custom_env_columns = tuple(t[0] for t in env_get_stats())
+        column_names = basic_columns + custom_columns + custom_env_columns
+        print("\t".join(column_names), file=f)
 
 
 class Evaluator(object):
@@ -401,17 +411,19 @@ class Evaluator(object):
         self.prev_eval_t = self.step_offset - self.step_offset % self.eval_interval
         self.save_best_so_far_agent = save_best_so_far_agent
         self.logger = logger or logging.getLogger(__name__)
+        self.env_get_stats = getattr(self.env, "get_statistics", lambda: [])
+        self.env_clear_stats = getattr(self.env, "clear_statistics", lambda: None)
+        assert callable(self.env_get_stats)
+        assert callable(self.env_clear_stats)
 
         # Write a header line first
-        with open(os.path.join(self.outdir, "scores.txt"), "w") as f:
-            custom_columns = tuple(t[0] for t in self.agent.get_statistics())
-            column_names = _basic_columns + custom_columns
-            print("\t".join(column_names), file=f)
+        write_header(self.outdir, self.agent, self.env)
 
         if use_tensorboard:
             self.tb_writer = create_tb_writer(outdir)
 
     def evaluate_and_update_max_score(self, t, episodes):
+        self.env_clear_stats()
         eval_stats = eval_performance(
             self.env,
             self.agent,
@@ -423,21 +435,27 @@ class Evaluator(object):
         elapsed = time.time() - self.start_time
         agent_stats = self.agent.get_statistics()
         custom_values = tuple(tup[1] for tup in agent_stats)
+        env_stats = self.env_get_stats()
+        custom_env_values = tuple(tup[1] for tup in env_stats)
         mean = eval_stats["mean"]
         values = (
-            t,
-            episodes,
-            elapsed,
-            mean,
-            eval_stats["median"],
-            eval_stats["stdev"],
-            eval_stats["max"],
-            eval_stats["min"],
-        ) + custom_values
+            (
+                t,
+                episodes,
+                elapsed,
+                mean,
+                eval_stats["median"],
+                eval_stats["stdev"],
+                eval_stats["max"],
+                eval_stats["min"],
+            )
+            + custom_values
+            + custom_env_values
+        )
         record_stats(self.outdir, values)
 
         if self.use_tensorboard:
-            record_tb_stats(self.tb_writer, agent_stats, eval_stats, t)
+            record_tb_stats(self.tb_writer, agent_stats, eval_stats, env_stats, t)
 
         if mean > self.max_score:
             self.logger.info("The best score is updated %s -> %s", self.max_score, mean)
@@ -467,7 +485,6 @@ class AsyncEvaluator(object):
         save_best_so_far_agent (bool): If set to True, after each evaluation,
             if the score (= mean return of evaluation episodes) exceeds
             the best-so-far score, the current agent is saved.
-        use_tensorboard (bool): Additionally log eval stats to tensorboard
     """
 
     def __init__(
@@ -480,7 +497,6 @@ class AsyncEvaluator(object):
         step_offset=0,
         save_best_so_far_agent=True,
         logger=None,
-        use_tensorboard=False,
     ):
         assert (n_steps is None) != (n_episodes is None), (
             "One of n_steps or n_episodes must be None. "
@@ -492,7 +508,6 @@ class AsyncEvaluator(object):
         self.n_episodes = n_episodes
         self.eval_interval = eval_interval
         self.outdir = outdir
-        self.use_tensorboard = use_tensorboard
         self.max_episode_len = max_episode_len
         self.step_offset = step_offset
         self.save_best_so_far_agent = save_best_so_far_agent
@@ -509,8 +524,8 @@ class AsyncEvaluator(object):
         with open(os.path.join(self.outdir, "scores.txt"), "a"):
             pass
 
-        if use_tensorboard:
-            self.tb_writer = create_tb_writer(outdir)
+        self.record_tb_stats_queue = None
+        self.record_tb_stats_thread = None
 
     @property
     def max_score(self):
@@ -519,6 +534,11 @@ class AsyncEvaluator(object):
         return v
 
     def evaluate_and_update_max_score(self, t, episodes, env, agent):
+        env_get_stats = getattr(env, "get_statistics", lambda: [])
+        env_clear_stats = getattr(env, "clear_statistics", lambda: None)
+        assert callable(env_get_stats)
+        assert callable(env_clear_stats)
+        env_clear_stats()
         eval_stats = eval_performance(
             env,
             agent,
@@ -530,21 +550,27 @@ class AsyncEvaluator(object):
         elapsed = time.time() - self.start_time
         agent_stats = agent.get_statistics()
         custom_values = tuple(tup[1] for tup in agent_stats)
+        env_stats = env_get_stats()
+        custom_env_values = tuple(tup[1] for tup in env_stats)
         mean = eval_stats["mean"]
         values = (
-            t,
-            episodes,
-            elapsed,
-            mean,
-            eval_stats["median"],
-            eval_stats["stdev"],
-            eval_stats["max"],
-            eval_stats["min"],
-        ) + custom_values
+            (
+                t,
+                episodes,
+                elapsed,
+                mean,
+                eval_stats["median"],
+                eval_stats["stdev"],
+                eval_stats["max"],
+                eval_stats["min"],
+            )
+            + custom_values
+            + custom_env_values
+        )
         record_stats(self.outdir, values)
 
-        if self.use_tensorboard:
-            record_tb_stats(self.tb_writer, agent_stats, eval_stats, t)
+        if self.record_tb_stats_queue is not None:
+            self.record_tb_stats_queue.put([agent_stats, eval_stats, env_stats, t])
 
         with self._max_score.get_lock():
             if mean > self._max_score.value:
@@ -556,12 +582,6 @@ class AsyncEvaluator(object):
                     save_agent(agent, "best", self.outdir, self.logger)
         return mean
 
-    def write_header(self, agent):
-        with open(os.path.join(self.outdir, "scores.txt"), "w") as f:
-            custom_columns = tuple(t[0] for t in agent.get_statistics())
-            column_names = _basic_columns + custom_columns
-            print("\t".join(column_names), file=f)
-
     def evaluate_if_necessary(self, t, episodes, env, agent):
         necessary = False
         with self.prev_eval_t.get_lock():
@@ -571,7 +591,19 @@ class AsyncEvaluator(object):
         if necessary:
             with self.wrote_header.get_lock():
                 if not self.wrote_header.value:
-                    self.write_header(agent)
+                    write_header(self.outdir, agent, env)
                     self.wrote_header.value = True
             return self.evaluate_and_update_max_score(t, episodes, env, agent)
         return None
+
+    def start_tensorboard_writer(self, outdir, stop_event):
+        self.record_tb_stats_queue = mp.Queue()
+        self.record_tb_stats_thread = pfrl.utils.StoppableThread(
+            target=record_tb_stats_loop,
+            args=[outdir, self.record_tb_stats_queue, stop_event],
+            stop_event=stop_event,
+        )
+        self.record_tb_stats_thread.start()
+
+    def join_tensorboard_writer(self):
+        self.record_tb_stats_thread.join()

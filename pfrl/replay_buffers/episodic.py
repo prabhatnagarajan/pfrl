@@ -1,12 +1,16 @@
 import collections
 import pickle
+from typing import Optional
 
 from pfrl.collections.random_access_queue import RandomAccessQueue
-from pfrl.replay_buffer import AbstractEpisodicReplayBuffer
-from pfrl.replay_buffer import random_subseq
+from pfrl.replay_buffer import AbstractEpisodicReplayBuffer, random_subseq
 
 
 class EpisodicReplayBuffer(AbstractEpisodicReplayBuffer):
+
+    # Implements AbstractReplayBuffer.capacity
+    capacity: Optional[int] = None
+
     def __init__(self, capacity=None):
         self.current_episode = collections.defaultdict(list)
         self.episodic_memory = RandomAccessQueue()

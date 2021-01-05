@@ -52,7 +52,6 @@ main() {
     marker+=' and gpu'
     bucket="${GPU}"
   fi
-  marker+=' and not download_model'
 
 
   UBUNTU_VERSION_ID=$(grep DISTRIB_RELEASE /etc/lsb-release | cut -d "=" -f2)
@@ -76,7 +75,7 @@ main() {
   # pytest does not run with attrs==19.2.0 (https://github.com/pytest-dev/pytest/issues/3280)  # NOQA
   "${PYTHON}" -m pip install \
       'pytest==4.1.1' 'attrs==19.1.0' 'pytest-xdist==1.26.1' \
-      'atari_py==0.1.1' 'opencv-python' 'zipp==1.0.0' 'pybullet==2.8.1' 'jupyterlab==2.1.5'
+      'atari_py==0.1.1' 'opencv-python' 'optuna' 'zipp==1.0.0' 'pybullet==2.8.1' 'jupyterlab==2.1.5'
 
   git config --global user.email "you@example.com"
   git config --global user.name "Your Name"

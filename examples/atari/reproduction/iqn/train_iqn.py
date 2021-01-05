@@ -7,10 +7,7 @@ import torch
 from torch import nn
 
 import pfrl
-from pfrl import experiments
-from pfrl import explorers
-from pfrl import utils
-from pfrl import replay_buffers
+from pfrl import experiments, explorers, replay_buffers, utils
 from pfrl.wrappers import atari_wrappers
 
 
@@ -165,8 +162,6 @@ def main():
     )
 
     if args.load or args.load_pretrained:
-        if args.load_pretrained:
-            raise Exception("Pretrained models are currently unsupported.")
         # either load or load_pretrained must be false
         assert not args.load or not args.load_pretrained
         if args.load:

@@ -1,17 +1,16 @@
 import logging
-import torch.multiprocessing as mp
 import os
-import torch
-from torch import nn
-
-import numpy as np
-
-from pfrl.experiments.evaluator import AsyncEvaluator
-from pfrl.utils import async_
-from pfrl.utils import random_seed
 import signal
 import subprocess
 import sys
+
+import numpy as np
+import torch
+import torch.multiprocessing as mp
+from torch import nn
+
+from pfrl.experiments.evaluator import AsyncEvaluator
+from pfrl.utils import async_, random_seed
 
 
 def kill_all():
@@ -254,9 +253,10 @@ def train_agent_async(
             max_episode_len=max_episode_len,
             step_offset=step_offset,
             save_best_so_far_agent=save_best_so_far_agent,
-            use_tensorboard=use_tensorboard,
             logger=logger,
         )
+        if use_tensorboard:
+            evaluator.start_tensorboard_writer(outdir, stop_event)
 
     if random_seeds is None:
         random_seeds = np.arange(processes)
@@ -312,5 +312,8 @@ def train_agent_async(
     async_.run_async(processes, run_func)
 
     stop_event.set()
+
+    if evaluator is not None and use_tensorboard:
+        evaluator.join_tensorboard_writer()
 
     return agent
