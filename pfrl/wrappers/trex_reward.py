@@ -85,7 +85,8 @@ class TREXReward():
                  phi=lambda x: x,
                  l1_lambda=0.0,
                  l1_threshold=5.0,
-                 save_network=False):
+                 save_network=False,
+                 alignment_type='post'):
         self.ranked_demos = ranked_demos
         self.steps = steps
         self.trex_network = network
@@ -104,6 +105,8 @@ class TREXReward():
         self.l1_lambda = l1_lambda
         self.l1_threshold = l1_threshold
         self.running_losses = collections.deque([], maxlen=10)
+        assert alignment_type in ('post', 'same', 'random')
+        self.alignment_type = alignment_type
         if gpu is not None and gpu >= 0:
             assert torch.cuda.is_available()
             self.device = torch.device("cuda:{}".format(gpu))
@@ -129,19 +132,30 @@ class TREXReward():
         traj_indices = np.random.choice(indices, size=2, replace=False)
         i = traj_indices[0]
         j = traj_indices[1]
-        min_ep_len = min(len(ranked_trajs[i]), len(ranked_trajs[j]))
+        traj_i = ranked_trajs[i]
+        traj_j = ranked_trajs[j]
+        min_ep_len = min(len(traj_1), len(traj_2))
         sub_traj_len = np.random.randint(self.min_sub_traj_len,
                                          self.max_sub_traj_len)
-        traj_1 = ranked_trajs[i]
-        traj_2 = ranked_trajs[j]
-        if i < j:
-            i_start = np.random.randint(min_ep_len - sub_traj_len + 1)
-            j_start = np.random.randint(i_start, len(traj_2) - sub_traj_len + 1)
-        else:
-            j_start = np.random.randint(min_ep_len - sub_traj_len + 1)
-            i_start = np.random.randint(j_start, len(traj_1) - sub_traj_len + 1)
-        sub_traj_i = subseq(traj_1, sub_traj_len, start=i_start)
-        sub_traj_j = subseq(traj_2, sub_traj_len, start=j_start)
+        if self.alignment_type == 'post'
+            if i < j:
+                i_start = np.random.randint(min_ep_len - sub_traj_len + 1)
+                j_start = np.random.randint(i_start, len(traj_j) - sub_traj_len + 1)
+            else:
+                j_start = np.random.randint(min_ep_len - sub_traj_len + 1)
+                i_start = np.random.randint(j_start, len(traj_i) - sub_traj_len + 1)
+        elif self.alignment_type == 'same':
+            if i < j:
+                i_start = np.random.randint(min_ep_len - sub_traj_len + 1)
+                j_start = i_start
+            else:
+                j_start = np.random.randint(min_ep_len - sub_traj_len + 1)
+                i_start = j_start
+        elif self.alignment_type == 'random':
+                i_start = np.random.randint(len(traj_i) - sub_traj_len + 1)
+                j_start = np.random.randint(len(traj_j) - sub_traj_len + 1)
+        sub_traj_i = subseq(traj_i, sub_traj_len, start=i_start)
+        sub_traj_j = subseq(traj_j, sub_traj_len, start=j_start)
         # if trajectory i is better than trajectory j
         if i > j:
             label = 0
