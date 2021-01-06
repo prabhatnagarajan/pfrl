@@ -137,7 +137,7 @@ class TREXReward():
         min_ep_len = min(len(traj_1), len(traj_2))
         sub_traj_len = np.random.randint(self.min_sub_traj_len,
                                          self.max_sub_traj_len)
-        if self.alignment_type == 'post'
+        if self.alignment_type == 'post':
             if i < j:
                 i_start = np.random.randint(min_ep_len - sub_traj_len + 1)
                 j_start = np.random.randint(i_start, len(traj_j) - sub_traj_len + 1)
