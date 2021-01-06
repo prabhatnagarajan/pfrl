@@ -134,7 +134,7 @@ class TREXReward():
         j = traj_indices[1]
         traj_i = ranked_trajs[i]
         traj_j = ranked_trajs[j]
-        min_ep_len = min(len(traj_1), len(traj_2))
+        min_ep_len = min(len(traj_i), len(traj_j))
         sub_traj_len = np.random.randint(self.min_sub_traj_len,
                                          self.max_sub_traj_len)
         if self.alignment_type == 'post':
