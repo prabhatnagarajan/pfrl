@@ -277,7 +277,7 @@ def main():
             if train_network:
                 ground_truth_trajectory_comparison(trex_reward, ranked_episodes)
             if not args.shaped_reward:
-                env = TREXRewardEnv(env=env, trex_reward=trex_reward)
+                env = TREXRewardEnv(env=env, trex_reward=trex_reward, output_nonlinearity='sigmoid')
             else:
                 env = TREXShapedRewardEnv(env=env, trex_reward=trex_reward,
                                           gamma=0.99)

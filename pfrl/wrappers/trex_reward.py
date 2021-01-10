@@ -13,6 +13,7 @@ from pfrl.envs import MultiprocessVectorEnv
 from pfrl.utils.batch_states import batch_states
 from pfrl.wrappers import VectorFrameStack
 
+from pdb import set_trace
 
 def subseq(seq, subseq_len, start):
     return seq[start: start + subseq_len]
@@ -115,8 +116,7 @@ class TREXReward():
             self.device = torch.device("cpu")
         if self.train_network:
             if optimizer is None:
-                self.optimizer = torch.optim.Adam(self.trex_network.parameters(),
-                                                  lr=5e-5)
+                self.optimizer = torch.optim.Adam(self.trex_network.parameters(), lr=5e-5)
             else:
                 self.optimizer = optimizer
             self.save_network = save_network
@@ -182,6 +182,12 @@ class TREXReward():
         batch = self.examples[self.index:self.index + self.traj_batch_size]
         return batch
 
+    def _get_batch_accuracy(self, predictions, labels):
+        log_softmax = F.log_softmax(predictions)
+        predicted_labels = torch.max(log_softmax, dim=1).indices
+        assert predicted_labels.shape == labels.shape
+        return float(torch.sum((predicted_labels==labels))) / float(len(predicted_labels))
+
     def _compute_loss(self, batch):
         device = self.device
         preprocessed = {
@@ -206,7 +212,7 @@ class TREXReward():
             output_l1_loss = 0.0
         cross_entropy_loss = nn.CrossEntropyLoss()
         loss = cross_entropy_loss(predictions, preprocessed['label']) + output_l1_loss
-        return loss
+        return loss, predictions, preprocessed['label']
 
     def _train(self):
         for step in range(1, self.steps + 1):
@@ -214,18 +220,27 @@ class TREXReward():
             batch = self.get_training_batch()
             # do updates
             self.optimizer.zero_grad()
-            loss = self._compute_loss(batch)
+            loss, predictions, labels = self._compute_loss(batch)
             loss.backward()
             self.optimizer.step()
             self.running_losses.append(loss.detach().cpu().numpy())
-            if len(self.running_losses) == 10:
-                with open(os.path.join(self.outdir, 'trex_loss_info.txt'), 'a') as f:
-                    print(sum(self.running_losses)/10.0, file=f)
+            if step % int(self.steps / min(self.steps, 100)) == 0:
+                batch_accuracy = self._get_batch_accuracy(predictions, labels)
+                self._log_training_info(batch_accuracy)
             if step % int(self.steps / min(self.steps, 100)) == 0:
                 print("Performed update " + str(step) + "/" + str(self.steps))
         print("Finished training TREX network.")
         if self.save_network:
             torch.save(self.trex_network.state_dict(), os.path.join(self.outdir, "network.pt"))
+
+    def _log_training_info(self, batch_accuracy):
+        if len(self.running_losses) == 10:
+            with open(os.path.join(self.outdir, 'trex_loss_info.txt'), 'a') as f:
+                print(sum(self.running_losses)/10.0, file=f)
+        with open(os.path.join(self.outdir, 'trex_training_accuracy.txt'), 'a') as f:
+            print(sum(self.running_losses)/10.0, file=f)
+        # with open(os.path.join(self.outdir, 'false_labels.txt'), 'a') as f:
+        #     print(sum(self.running_losses)/10.0, file=f)
 
     def __call__(self, x):
         with torch.no_grad():
@@ -255,7 +270,7 @@ class TREXRewardEnv(gym.Wrapper):
                           self.trex_reward.phi)
         # Outputs a reward of a single state, so shape is (1,1)
         inverse_reward = self.trex_reward(obs).cpu().numpy()[0][0]
-        if self.output_nonlinearity == 'sigmoid'
+        if self.output_nonlinearity == 'sigmoid':
             info['pre_sigmoid_reward'] = inverse_reward
             inverse_reward = scipy.special.expit(inverse_reward)
             info['inverse_reward'] = inverse_reward
