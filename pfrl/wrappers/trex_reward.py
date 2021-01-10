@@ -225,10 +225,9 @@ class TREXReward():
             self.optimizer.step()
             self.running_losses.append(loss.detach().cpu().numpy())
             if step % int(self.steps / min(self.steps, 100)) == 0:
+                print("Performed update " + str(step) + "/" + str(self.steps))
                 batch_accuracy = self._get_batch_accuracy(predictions, labels)
                 self._log_training_info(batch_accuracy)
-            if step % int(self.steps / min(self.steps, 100)) == 0:
-                print("Performed update " + str(step) + "/" + str(self.steps))
         print("Finished training TREX network.")
         if self.save_network:
             torch.save(self.trex_network.state_dict(), os.path.join(self.outdir, "network.pt"))
@@ -238,7 +237,7 @@ class TREXReward():
             with open(os.path.join(self.outdir, 'trex_loss_info.txt'), 'a') as f:
                 print(sum(self.running_losses)/10.0, file=f)
         with open(os.path.join(self.outdir, 'trex_training_accuracy.txt'), 'a') as f:
-            print(sum(self.running_losses)/10.0, file=f)
+            print(batch_accuracy, file=f)
         # with open(os.path.join(self.outdir, 'false_labels.txt'), 'a') as f:
         #     print(sum(self.running_losses)/10.0, file=f)
 
