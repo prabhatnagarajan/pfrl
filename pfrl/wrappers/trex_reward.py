@@ -241,9 +241,12 @@ class TREXRewardEnv(gym.Wrapper):
     """
 
     def __init__(self, env,
-                 trex_reward):
+                 trex_reward,
+                 output_nonlinearity='identity'):
         super().__init__(env)
         self.trex_reward = trex_reward
+        assert output_nonlinearity in ('identity', 'sigmoid')
+        self.output_nonlinearity = output_nonlinearity
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
@@ -252,9 +255,10 @@ class TREXRewardEnv(gym.Wrapper):
                           self.trex_reward.phi)
         # Outputs a reward of a single state, so shape is (1,1)
         inverse_reward = self.trex_reward(obs).cpu().numpy()[0][0]
-        info['pre_sigmoid_reward'] = inverse_reward
-        inverse_reward = scipy.special.expit(inverse_reward)
-        info['inverse_reward'] = inverse_reward
+        if self.output_nonlinearity == 'sigmoid'
+            info['pre_sigmoid_reward'] = inverse_reward
+            inverse_reward = scipy.special.expit(inverse_reward)
+            info['inverse_reward'] = inverse_reward
         return observation, inverse_reward, done, info
 
 class TREXMultiprocessRewardEnv(MultiprocessVectorEnv):
