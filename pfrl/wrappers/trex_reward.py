@@ -272,7 +272,6 @@ class TREXRewardEnv(gym.Wrapper):
         if self.output_nonlinearity == 'sigmoid':
             info['pre_sigmoid_reward'] = inverse_reward
             inverse_reward = scipy.special.expit(inverse_reward)
-            info['inverse_reward'] = inverse_reward
         return observation, inverse_reward, done, info
 
 class TREXMultiprocessRewardEnv(MultiprocessVectorEnv):
