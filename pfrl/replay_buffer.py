@@ -113,6 +113,59 @@ class AbstractReplayBuffer(object, metaclass=ABCMeta):
         """
         raise NotImplementedError
 
+class AbstractDataAugmentedReplayBuffer(AbstractReplayBuffer):
+    """Wrapper for replay buffer for data augmentation.
+
+    """
+
+    def __init__(self, replay_buffer):
+        self.buffer = replay_buffer
+
+
+    def append(
+        self,
+        state,
+        action,
+        reward,
+        next_state=None,
+        next_action=None,
+        is_state_terminal=False,
+        env_id=0,
+        **kwargs):
+            self.buffer.append(state,
+                               action,
+                               reward,
+                               next_state=next_state,
+                                      next_action=next_action,
+                                      is_state_terminal=is_state_terminal,
+                                      env_id=env_id,
+                                      **kwargs)
+
+
+    @abstractmethod
+    def augmented_batch(self, batch):
+        raise NotImplementedError()
+
+    def sample(self, n):
+        batch = self.buffer.sample(n)
+        return self.augmented_batch(batch)
+
+
+    def __len__(self):
+        return len(self.buffer)
+
+    def save(self, filename):
+        self.buffer.save(filename)
+
+    def load(self, filename):
+        self.buffer.load(filename)
+
+    def capacity(self) -> Optional[int]:
+        return self.buffer.capacity()
+
+    def stop_current_episode(self, env_id=0):
+        self.buffer.stop_current_episode(env_id)
+
 
 class AbstractEpisodicReplayBuffer(AbstractReplayBuffer):
     """Defines a common interface of episodic replay buffer.
