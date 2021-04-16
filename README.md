@@ -107,15 +107,17 @@ Any kind of contribution to PFRL would be highly appreciated! If you are interes
 
 ## Citations
 
-To cite PFRL in publications, cite our predecessor library:
+To cite PFRL in publications, please cite our [paper](https://www.jmlr.org/papers/v22/20-376.html) on ChainerRL, the library on which PFRL is based:
 
 ```
-@InProceedings{fujita2019chainerrl,
-  author = {Fujita, Yasuhiro and Kataoka, Toshiki and Nagarajan, Prabhat and Ishikawa, Takahiro},
-  title = {ChainerRL: A Deep Reinforcement Learning Library},
-  booktitle = {Workshop on Deep Reinforcement Learning at the 33rd Conference on Neural Information Processing Systems},
-  location = {Vancouver, Canada},
-  month = {December},
-  year = {2019}
+@article{JMLR:v22:20-376,
+  author  = {Yasuhiro Fujita and Prabhat Nagarajan and Toshiki Kataoka and Takahiro Ishikawa},
+  title   = {ChainerRL: A Deep Reinforcement Learning Library},
+  journal = {Journal of Machine Learning Research},
+  year    = {2021},
+  volume  = {22},
+  number  = {77},
+  pages   = {1-14},
+  url     = {http://jmlr.org/papers/v22/20-376.html}
 }
 ```
