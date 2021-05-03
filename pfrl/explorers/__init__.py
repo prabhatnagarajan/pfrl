@@ -4,4 +4,5 @@ from pfrl.explorers.boltzmann import Boltzmann  # NOQA
 from pfrl.explorers.epsilon_greedy import ConstantEpsilonGreedy  # NOQA
 from pfrl.explorers.epsilon_greedy import ExponentialDecayEpsilonGreedy  # NOQA
 from pfrl.explorers.epsilon_greedy import LinearDecayEpsilonGreedy  # NOQA
+from pfrl.explorers.easy_greedy import LinearDecayEasyGreedy  # NOQA
 from pfrl.explorers.greedy import Greedy  # NOQA
