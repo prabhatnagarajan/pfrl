@@ -4,7 +4,7 @@ from setuptools import setup
 
 install_requires = [
     'torch>=1.3.0',
-    'gymnasium[all]',
+    'gymnasium[atari]',
     'numpy>=1.11.0',
     'pillow',
     'filelock',
@@ -16,7 +16,7 @@ test_requires = [
 ]
 
 setup(name='pfrl',
-      version='0.3.0',
+      version='0.4.0',
       description='PFRL, a deep reinforcement learning library',
       long_description=codecs.open('README.md', 'r', encoding='utf-8').read(),
       long_description_content_type='text/markdown',
