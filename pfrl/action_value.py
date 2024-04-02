@@ -58,7 +58,12 @@ class DiscreteActionValue(ActionValue):
 
     @lazy_property
     def greedy_actions(self):
-        return self.q_values.detach().argmax(axis=1).int()
+        max_values = self.q_values.max(axis=1, keepdim=True)[0]
+        mask = torch.eq(self.q_values, max_values).int()
+        num_max_actions = mask.sum(axis=1)
+        action_probabilities = mask / num_max_actions.unsqueeze(1)
+        sampled_indices = torch.multinomial(prob_matrix, 1, replacement=True)
+        return sampled_indices.flatten()
 
     @lazy_property
     def max(self):
