@@ -62,7 +62,7 @@ class DiscreteActionValue(ActionValue):
         mask = torch.eq(self.q_values, max_values).int()
         num_max_actions = mask.sum(axis=1)
         action_probabilities = mask / num_max_actions.unsqueeze(1)
-        sampled_indices = torch.multinomial(prob_matrix, 1, replacement=True)
+        sampled_indices = torch.multinomial(action_probabilities, 1, replacement=True)
         return sampled_indices.flatten()
 
     @lazy_property
