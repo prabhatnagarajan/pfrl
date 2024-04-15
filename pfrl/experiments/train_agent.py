@@ -4,6 +4,7 @@ import os
 from pfrl.experiments.evaluator import Evaluator, save_agent
 from pfrl.utils.ask_yes_no import ask_yes_no
 
+import resource
 
 def save_agent_replay_buffer(agent, t, outdir, suffix="", logger=None):
     logger = logger or logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def train_agent(
     episode_idx = 0
 
     # o_0, r_0
-    obs = env.reset()
+    obs , info = env.reset()
 
     t = step_offset
     if hasattr(agent, "t"):
@@ -54,18 +55,21 @@ def train_agent(
             # a_t
             action = agent.act(obs)
             # o_{t+1}, r_{t+1}
-            obs, r, done, info = env.step(action)
+            obs, r, terminated, truncated, info = env.step(action)
             t += 1
             episode_r += r
             episode_len += 1
-            reset = episode_len == max_episode_len or info.get("needs_reset", False)
-            agent.observe(obs, r, done, reset)
+            reset = episode_len == max_episode_len or info.get("needs_reset", False) or truncated
+            agent.observe(obs, r, terminated, reset)
 
             for hook in step_hooks:
                 hook(env, agent, t)
 
-            episode_end = done or reset or t == steps
+            episode_end = terminated or reset or t == steps
 
+            if t % 5000 == 0:
+                mem_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                print("RAM usage (GB) =", mem_kb / (1024 ** 2))
             if episode_end:
                 logger.info(
                     "outdir:%s step:%s episode:%s R:%s",
@@ -96,7 +100,7 @@ def train_agent(
                 # Start a new episode
                 episode_r = 0
                 episode_len = 0
-                obs = env.reset()
+                obs, info = env.reset()
             if checkpoint_freq and t % checkpoint_freq == 0:
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
 
