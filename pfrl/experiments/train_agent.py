@@ -4,6 +4,7 @@ import os
 from pfrl.experiments.evaluator import Evaluator, save_agent
 from pfrl.utils.ask_yes_no import ask_yes_no
 
+import resource
 
 def save_agent_replay_buffer(agent, t, outdir, suffix="", logger=None):
     logger = logger or logging.getLogger(__name__)
@@ -66,6 +67,9 @@ def train_agent(
 
             episode_end = terminated or reset or t == steps
 
+            if t % 5000 == 0:
+                mem_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                print("RAM usage (GB) =", mem_kb / (1024 ** 2))
             if episode_end:
                 logger.info(
                     "outdir:%s step:%s episode:%s R:%s",

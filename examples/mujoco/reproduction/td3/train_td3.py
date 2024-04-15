@@ -16,7 +16,42 @@ from torch import nn
 
 import pfrl
 from pfrl import experiments, explorers, replay_buffers, utils
+from pdb import set_trace
 
+def are_equal(model1, model2):
+    # Check if the model architectures are the same
+    if str(model1) != str(model2):
+        return False
+    
+    # Check if the model parameters are the same
+    for param1, param2 in zip(model1.parameters(), model2.parameters()):
+        set_trace()
+        if not torch.equal(param1.data, param2.data):
+            return False
+    
+    return True
+
+def compare_agents(agent1, agent2):
+    policy_equal = are_equal(agent1.policy, agent2.policy)
+    q_func_1_equal = are_equal(agent1.q_func1, agent2.q_func1)
+    q_func_2_equal = are_equal(agent1.q_func2, agent2.q_func2)
+    return (policy_equal, q_func_1_equal, q_func_2_equal)
+
+
+class SeedWrapper(gymnasium.Wrapper):
+
+    def __init__(self, env, seed):
+        self.env = env
+        self.seed = seed
+        self.first_reset = True
+
+    def reset(self, **kwargs):
+        if self.first_reset:
+            self.first_reset = False
+            kwargs['seed'] = self.seed
+            return self.env.reset(**kwargs)
+        else:
+            return self.env.reset(**kwargs)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -32,7 +67,7 @@ def main():
     parser.add_argument(
         "--env",
         type=str,
-        default="Hopper-v2",
+        default="Hopper-v4",
         help="OpenAI gymnasium MuJoCo env to perform algorithm on.",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed [0, 2 ** 32)")
@@ -51,7 +86,7 @@ def main():
     parser.add_argument(
         "--eval-n-runs",
         type=int,
-        default=10,
+        default=30,
         help="Number of episodes run for each evaluation.",
     )
     parser.add_argument(
@@ -97,10 +132,9 @@ def main():
         env = gymnasium.make(args.env)
         # Unwrap TimeLimit wrapper
         assert isinstance(env, gymnasium.wrappers.TimeLimit)
-        env = env.env
         # Use different random seeds for train and test envs
         env_seed = 2**32 - 1 - args.seed if test else args.seed
-        env.seed(env_seed)
+        env = SeedWrapper(env, env_seed)
         # Cast observations to float32 because our model uses float32
         env = pfrl.wrappers.CastObservationToFloat32(env)
         if args.monitor:
@@ -172,6 +206,48 @@ def main():
         minibatch_size=args.batch_size,
         burnin_action_func=burnin_action_func,
     )
+
+    agent_2 = pfrl.agents.TD3(
+        policy,
+        q_func1,
+        q_func2,
+        policy_optimizer,
+        q_func1_optimizer,
+        q_func2_optimizer,
+        rbuf,
+        gamma=0.99,
+        soft_update_tau=5e-3,
+        explorer=explorer,
+        replay_start_size=args.replay_start_size,
+        gpu=args.gpu,
+        minibatch_size=args.batch_size,
+        burnin_action_func=burnin_action_func,
+    )
+
+    agent_3 = pfrl.agents.TD3(
+        policy,
+        q_func1,
+        q_func2,
+        policy_optimizer,
+        q_func1_optimizer,
+        q_func2_optimizer,
+        rbuf,
+        gamma=0.99,
+        soft_update_tau=5e-3,
+        explorer=explorer,
+        replay_start_size=args.replay_start_size,
+        gpu=args.gpu,
+        minibatch_size=args.batch_size,
+        burnin_action_func=burnin_action_func,
+    )
+
+    agent.load('results/0f1677abd4d79879fff95c0f10649963c05e244a-fda9f3b5-ceafa50b/20000_finish')
+    agent_2.load('results/e706a70f34f96599dc56d041e0023a021321e49d-fda9f3b5-ceafa50b/20000_finish')
+    agent_3.load('results/e706a70f34f96599dc56d041e0023a021321e49d-c94d7bec-a56ef980/25000_finish')
+
+    compare_agents(agent, agent_3)
+    # set_trace()
+
 
     if len(args.load) > 0 or args.load_pretrained:
         # either load or load_pretrained must be false
