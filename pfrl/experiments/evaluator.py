@@ -8,6 +8,10 @@ import numpy as np
 
 import pfrl
 
+import gymnasium as gym
+from gymnasium.utils.save_video import save_video
+
+from pdb import set_trace
 
 def _run_episodes(
     env,
@@ -23,25 +27,31 @@ def _run_episodes(
     logger = logger or logging.getLogger(__name__)
     scores = []
     lengths = []
-    terminate = False
+    terminated = False
     timestep = 0
 
     reset = True
-    while not terminate:
+    while not terminated:
         if reset:
-            obs = env.reset()
-            done = False
+            obs, info = env.reset()
+            terminated = False
             test_r = 0
             episode_len = 0
             info = {}
         a = agent.act(obs)
-        obs, r, done, info = env.step(a)
+        obs, r, terminated, truncated, info = env.step(a)
         test_r += r
         episode_len += 1
         timestep += 1
-        reset = done or episode_len == max_episode_len or info.get("needs_reset", False)
-        agent.observe(obs, r, done, reset)
+        reset = terminated or episode_len == max_episode_len or info.get("needs_reset", False) or truncated
+        agent.observe(obs, r, terminated, reset)
         if reset:
+            save_video(
+                  env.render(),
+                  "videos",
+                  fps=60,
+                  step_starting_index=0,
+                  episode_index=len(lengths))
             logger.info(
                 "evaluation episode %s length:%s R:%s", len(scores), episode_len, test_r
             )
@@ -50,9 +60,9 @@ def _run_episodes(
             scores.append(float(test_r))
             lengths.append(float(episode_len))
         if n_steps is None:
-            terminate = len(scores) >= n_episodes
+            terminated = len(scores) >= n_episodes
         else:
-            terminate = timestep >= n_steps
+            terminated = timestep >= n_steps
     # If all steps were used for a single unfinished episode
     if len(scores) == 0:
         scores.append(float(test_r))
@@ -120,7 +130,7 @@ def _batch_run_episodes(
     episode_r = np.zeros(num_envs, dtype=np.float64)
     episode_len = np.zeros(num_envs, dtype="i")
 
-    obss = env.reset()
+    obss, infos = env.reset()
     rs = np.zeros(num_envs, dtype="f")
 
     termination_conditions = False
@@ -130,7 +140,7 @@ def _batch_run_episodes(
         actions = agent.batch_act(obss)
         timestep += 1
         # o_{t+1}, r_{t+1}
-        obss, rs, dones, infos = env.step(actions)
+        obss, rs, terminations, truncations, infos = env.step(actions)
         episode_r += rs
         episode_len += 1
         # Compute mask for done and reset
@@ -139,11 +149,11 @@ def _batch_run_episodes(
         else:
             resets = episode_len == max_episode_len
         resets = np.logical_or(
-            resets, [info.get("needs_reset", False) for info in infos]
+            resets, [info.get("needs_reset", False) or truncated for truncated, info in zip(truncations, infos)]
         )
 
         # Make mask. 0 if done/reset, 1 if pass
-        end = np.logical_or(resets, dones)
+        end = np.logical_or(resets, terminations)
         not_end = np.logical_not(end)
 
         for index in range(len(end)):
@@ -199,12 +209,12 @@ def _batch_run_episodes(
             resets.fill(True)
 
         # Agent observes the consequences.
-        agent.batch_observe(obss, rs, dones, resets)
+        agent.batch_observe(obss, rs, terminations, resets)
 
         if termination_conditions:
             break
         else:
-            obss = env.reset(not_end)
+            obss, infos = env.reset(not_end)
 
     for i, (epi_len, epi_ret) in enumerate(
         zip(eval_episode_lens, eval_episode_returns)

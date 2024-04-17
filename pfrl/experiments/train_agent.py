@@ -68,8 +68,9 @@ def train_agent(
             episode_end = terminated or reset or t == steps
 
             if t % 5000 == 0:
-                mem_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                print("RAM usage (GB) =", mem_kb / (1024 ** 2))
+                mem_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                mem_usage = mem_bytes / (1024 ** 3)
+                print(f"timestep:{t} RAM usage (GB)= {mem_usage}")
             if episode_end:
                 logger.info(
                     "outdir:%s step:%s episode:%s R:%s",

@@ -1,4 +1,4 @@
-"""A training script of TD3 on OpenAI Gym Mujoco environments.
+"""A training script of TD3 on OpenAI gymnasium Mujoco environments.
 
 This script follows the settings of http://arxiv.org/abs/1802.09477 as much
 as possible.
@@ -8,8 +8,8 @@ import argparse
 import logging
 import sys
 
-import gym
-import gym.wrappers
+import gymnasium
+import gymnasium.wrappers
 import numpy as np
 import torch
 from torch import nn
@@ -17,6 +17,21 @@ from torch import nn
 import pfrl
 from pfrl import experiments, explorers, replay_buffers, utils
 
+
+class SeedWrapper(gymnasium.Wrapper):
+
+    def __init__(self, env, seed):
+        self.env = env
+        self.seed = seed
+        self.first_reset = True
+
+    def reset(self, **kwargs):
+        if self.first_reset:
+            self.first_reset = False
+            kwargs['seed'] = self.seed
+            return self.env.reset(**kwargs)
+        else:
+            return self.env.reset(**kwargs)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -32,8 +47,15 @@ def main():
     parser.add_argument(
         "--env",
         type=str,
-        default="Hopper-v2",
-        help="OpenAI Gym MuJoCo env to perform algorithm on.",
+        default="Hopper-v4",
+        help="OpenAI gymnasium MuJoCo env to perform algorithm on.",
+    )
+    parser.add_argument(
+        "--agent",
+        type=str,
+        choices=['td3'],
+        default='td3',
+        help="Agent variant to train.",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed [0, 2 ** 32)")
     parser.add_argument(
@@ -51,7 +73,7 @@ def main():
     parser.add_argument(
         "--eval-n-runs",
         type=int,
-        default=10,
+        default=30,
         help="Number of episodes run for each evaluation.",
     )
     parser.add_argument(
@@ -78,7 +100,7 @@ def main():
         "--pretrained-type", type=str, default="best", choices=["best", "final"]
     )
     parser.add_argument(
-        "--monitor", action="store_true", help="Wrap env with gym.wrappers.Monitor."
+        "--monitor", action="store_true", help="Wrap env with gymnasium.wrappers.Monitor."
     )
     parser.add_argument(
         "--log-level", type=int, default=logging.INFO, help="Level of the root logger."
@@ -94,13 +116,12 @@ def main():
     utils.set_random_seed(args.seed)
 
     def make_env(test):
-        env = gym.make(args.env)
+        env = gymnasium.make(args.env)
         # Unwrap TimeLimit wrapper
-        assert isinstance(env, gym.wrappers.TimeLimit)
-        env = env.env
+        assert isinstance(env, gymnasium.wrappers.TimeLimit)
         # Use different random seeds for train and test envs
         env_seed = 2**32 - 1 - args.seed if test else args.seed
-        env.seed(env_seed)
+        env = SeedWrapper(env, env_seed)
         # Cast observations to float32 because our model uses float32
         env = pfrl.wrappers.CastObservationToFloat32(env)
         if args.monitor:

@@ -14,6 +14,9 @@ from pfrl.q_functions import DiscreteActionValueHead
 from pfrl.wrappers import atari_wrappers
 
 
+import gymnasium as gym
+from gymnasium.utils.save_video import save_video
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -104,12 +107,12 @@ def main():
         if test:
             # Randomize actions like epsilon-greedy in evaluation as well
             env = pfrl.wrappers.RandomizeAction(env, 0.05)
-        if args.monitor:
-            env = pfrl.wrappers.Monitor(
-                env, args.outdir, mode="evaluation" if test else "training"
-            )
-        if args.render:
-            env = pfrl.wrappers.Render(env)
+        # if args.monitor:
+        #     env = pfrl.wrappers.Monitor(
+        #         env, args.outdir, mode="evaluation" if test else "training"
+        #     )
+        # if args.render:
+        #     env = pfrl.wrappers.Render(env)
         return env
 
     env = make_env(test=False)
