@@ -1,10 +1,10 @@
 
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Type, Union
 
+import copy
 import numpy as np
 import torch
-from torch.utils.data._utils.collate import collate
-from torch.utils.data._utils.collate import default_collate_fn_map
+from torch.utils.data._utils.collate import collate, default_collate_fn_map, np_str_obj_array_pattern
 
 
 def collate_numpy_array_fn(batch, *, collate_fn_map: Optional[Dict[Union[Type, Tuple[Type, ...]], Callable]] = None):
@@ -16,7 +16,7 @@ def collate_numpy_array_fn(batch, *, collate_fn_map: Optional[Dict[Union[Type, T
         raise TypeError(default_collate_err_msg_format.format(elem.dtype))
     return collate([torch.tensor(b) for b in batch], collate_fn_map=collate_fn_map)
 
-
+pfrl_default_collate_fn_map = copy.deepcopy(default_collate_fn_map)
 pfrl_default_collate_fn_map[np.ndarray] = collate_numpy_array_fn
 
 def _to_recursive(batched: Any, device: torch.device) -> Any:
