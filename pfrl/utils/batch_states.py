@@ -44,7 +44,7 @@ def batch_states(
         the object which will be given as input to the model.
     """
     features = [phi(s) for s in states]
-    collated_features = collate(phi, collate_fn_map=pfrl_default_collate_fn_map)
+    collated_features = collate(features, collate_fn_map=pfrl_default_collate_fn_map)
     if isinstance(features[0], tuple):
         collated_features = tuple(collated_features)
     return _to_recursive(collated_features, device)
