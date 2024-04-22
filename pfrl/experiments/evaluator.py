@@ -8,6 +8,8 @@ import numpy as np
 
 import pfrl
 
+import resource
+
 def _run_episodes(
     env,
     agent,
@@ -388,8 +390,11 @@ def write_header(outdir, agent, env):
         env_get_stats = getattr(env, "get_statistics", lambda: [])
         assert callable(env_get_stats)
         custom_env_columns = tuple(t[0] for t in env_get_stats())
-        column_names = basic_columns + custom_columns + custom_env_columns
+        mem_usage_gb = ("mem_usage_gb",)
+        column_names = basic_columns + custom_columns + custom_env_columns + mem_usage_gb
+        num_columns = len(column_names)
         print("\t".join(column_names), file=f)
+    return num_columns
 
 
 class Evaluator(object):
@@ -454,7 +459,7 @@ class Evaluator(object):
         assert callable(self.env_clear_stats)
 
         # Write a header line first
-        write_header(self.outdir, self.agent, self.env)
+        self.num_columns = write_header(self.outdir, self.agent, self.env)
 
         if use_tensorboard:
             self.tb_writer = create_tb_writer(outdir)
@@ -489,6 +494,10 @@ class Evaluator(object):
             + custom_values
             + custom_env_values
         )
+        mem_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        mem_usage_gb = mem_kb / (1024 ** 2)
+        values = (values + (mem_usage_gb,))
+        assert len(values) == self.num_columns
         record_stats(self.outdir, values)
 
         if self.use_tensorboard:

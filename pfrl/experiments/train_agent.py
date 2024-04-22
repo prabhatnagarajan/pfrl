@@ -168,6 +168,7 @@ def train_agent_with_evaluation(
         eval_stats_history: List of evaluation episode stats dict.
     """
 
+
     logger = logger or logging.getLogger(__name__)
 
     for hook in evaluation_hooks:
