@@ -12,7 +12,7 @@ from pfrl.replay_buffer import ReplayUpdater, batch_experiences
 from pfrl.utils.batch_states import batch_states
 from pfrl.utils.contexts import evaluating
 from pfrl.utils.copy_param import synchronize_parameters
-
+from pdb import set_trace
 
 def _mean_or_nan(xs):
     """Return its mean a non-empty sequence, numpy.nan for a empty one."""
@@ -181,7 +181,8 @@ class DDPG(AttributeSavingMixin, BatchAgent):
         loss = -q.mean()
 
         # Update stats
-        self.q_record.extend(q.item())
+        set_trace()
+        self.q_record.extend(q.tolist())
         self.actor_loss_record.append(loss.item())
 
         return loss
