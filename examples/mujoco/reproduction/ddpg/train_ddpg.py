@@ -21,6 +21,22 @@ from pfrl.nn import BoundByTanh, ConcatObsAndAction
 from pfrl.policies import DeterministicHead
 
 
+class SeedWrapper(gymnasium.Wrapper):
+
+    def __init__(self, env, seed):
+        self.env = env
+        env.action_space.seed(seed)
+        self.seed = seed
+        self.first_reset = True
+
+    def reset(self, **kwargs):
+        if self.first_reset:
+            self.first_reset = False
+            kwargs['seed'] = self.seed
+            return self.env.reset(**kwargs)
+        else:
+            return self.env.reset(**kwargs)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -103,7 +119,7 @@ def main():
         env = env.env
         # Use different random seeds for train and test envs
         env_seed = 2**32 - 1 - args.seed if test else args.seed
-        env.seed(env_seed)
+        env = SeedWrapper(env, env_seed)
         # Cast observations to float32 because our model uses float32
         env = pfrl.wrappers.CastObservationToFloat32(env)
         if args.monitor:
