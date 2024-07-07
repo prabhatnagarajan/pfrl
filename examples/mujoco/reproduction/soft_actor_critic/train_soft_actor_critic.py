@@ -122,9 +122,9 @@ def main():
         assert isinstance(env, gymnasium.wrappers.TimeLimit)
         env = env.env
         # Use different random seeds for train and test envs
-        process_seed = int(process_seeds[process_idx])
-        env_seed = 2**32 - 1 - process_seed if test else process_seed
-        env.seed(env_seed)
+        # process_seed = int(process_seeds[process_idx])
+        # env_seed = 2**32 - 1 - process_seed if test else process_seed
+        # env.seed(env_seed)
         # Cast observations to float32 because our model uses float32
         env = pfrl.wrappers.CastObservationToFloat32(env)
         # Normalize action space to [-1, 1]^n
