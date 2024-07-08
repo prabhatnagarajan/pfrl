@@ -181,8 +181,7 @@ class DDPG(AttributeSavingMixin, BatchAgent):
         loss = -q.mean()
 
         # Update stats
-        set_trace()
-        self.q_record.extend(q.tolist())
+        self.q_record.extend(q.detach().cpu().numpy())
         self.actor_loss_record.append(loss.item())
 
         return loss
