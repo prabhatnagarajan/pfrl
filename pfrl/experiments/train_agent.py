@@ -4,6 +4,8 @@ import os
 from pfrl.experiments.evaluator import Evaluator, save_agent
 from pfrl.utils.ask_yes_no import ask_yes_no
 
+# import numpy as np
+# import PIL as Image
 
 def save_agent_replay_buffer(agent, t, outdir, suffix="", logger=None):
     logger = logger or logging.getLogger(__name__)
@@ -49,12 +51,27 @@ def train_agent(
 
     eval_stats_history = []  # List of evaluation episode stats dict
     episode_len = 0
+    best_eval_score = -float('inf')
     try:
         while t < steps:
             # a_t
             action = agent.act(obs)
             # o_{t+1}, r_{t+1}
             obs, r, terminated, truncated, info = env.step(action)
+            # Save the image in a folder
+            # image_folder = os.path.join(outdir, "images")
+            # os.makedirs(image_folder, exist_ok=True)
+            # image_path = os.path.join(image_folder, f"{t}.png")
+            # from PIL import Image
+            # # import pdb; pdb.set_trace()
+            # image = obs.transpose(1, 2, 0)  # CHW -> HWC
+            
+            # image = image.astype('uint8')  # Convert to uint8
+            # image = Image.fromarray(image)
+            # image.save(image_path)
+            # logger.info("Saved the image to %s", image_path)
+            
+            # Normalize the observation
             t += 1
             episode_r += r
             episode_len += 1
@@ -64,26 +81,32 @@ def train_agent(
             for hook in step_hooks:
                 hook(env, agent, t)
 
-            episode_end = terminated or reset or t == steps
+            episode_end = terminated or reset or t == steps or t%3000 == 0
 
-            if episode_end:
-                logger.info(
-                    "outdir:%s step:%s episode:%s R:%s",
-                    outdir,
-                    t,
-                    episode_idx,
-                    episode_r,
-                )
-                stats = agent.get_statistics()
-                logger.info("statistics:%s", stats)
-                episode_idx += 1
+            logger.info(
+                "outdir:%s step:%s episode:%s R:%s",
+                outdir,
+                t,
+                episode_idx,
+                episode_r,
+            )
+            with open(os.path.join(outdir, "episode_rewards.txt"), "a") as f:
+                f.write(f"{episode_idx}: {episode_r}\n")
+            
+            stats = agent.get_statistics()
+            logger.info("statistics:%s", stats)
+            episode_idx += 1
 
-            if evaluator is not None and (episode_end or eval_during_episode):
+            if evaluator is not None:
                 eval_score = evaluator.evaluate_if_necessary(t=t, episodes=episode_idx)
                 if eval_score is not None:
                     eval_stats = dict(agent.get_statistics())
                     eval_stats["eval_score"] = eval_score
                     eval_stats_history.append(eval_stats)
+                    if eval_score > best_eval_score:
+                        best_eval_score = eval_score
+                        save_agent(agent, t, outdir, logger, suffix="_best")
+
                 if (
                     successful_score is not None
                     and evaluator.max_score >= successful_score
@@ -94,6 +117,8 @@ def train_agent(
                 if t == steps:
                     break
                 # Start a new episode
+                with open(os.path.join(outdir, "Each_episode_rewards.txt"), "a") as f:
+                    f.write(f"{episode_idx}: {episode_r}\n")
                 episode_r = 0
                 episode_len = 0
                 obs, info = env.reset()
