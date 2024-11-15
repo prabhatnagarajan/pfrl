@@ -81,7 +81,7 @@ def train_agent(
             for hook in step_hooks:
                 hook(env, agent, t)
 
-            episode_end = terminated or reset or t == steps or t%3000 == 0
+            episode_end = terminated or reset or t == steps
 
             logger.info(
                 "outdir:%s step:%s episode:%s R:%s",
