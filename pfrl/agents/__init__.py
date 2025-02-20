@@ -17,3 +17,5 @@ from pfrl.agents.soft_actor_critic import SoftActorCritic  # NOQA
 from pfrl.agents.state_q_function_actor import StateQFunctionActor  # NOQA
 from pfrl.agents.td3 import TD3  # NOQA
 from pfrl.agents.trpo import TRPO  # NOQA
+from pfrl.agents.hybrid_soft_actor_critic import HybridSoftActorCritic # NOQA
+from pfrl.agents.hybrid_ppo import HybridPPO # NOQA
