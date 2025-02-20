@@ -431,10 +431,10 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
                 assert self.batch_last_action[i] is not None
                 # Add a transition to the replay buffer
                 self.replay_buffer.append(
-                    state=self.batch_last_obs[i],
+                    state=self.batch_last_obs[i].astype(np.uint8),
                     action=self.batch_last_action[i],
                     reward=batch_reward[i],
-                    next_state=batch_obs[i],
+                    next_state=batch_obs[i].astype(np.uint8),
                     next_action=None,
                     is_state_terminal=batch_done[i],
                     env_id=i,
