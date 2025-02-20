@@ -391,7 +391,7 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
             batch_xs = self.batch_states(batch_obs, self.device, self.phi)
             policy_out = self.policy(batch_xs)
             if deterministic:
-                batch_action = (mode_of_distribution(policy_out[0]).cpu().numpy(), mode_of_distribution(policy_out[1]).cpu().numpy())
+                batch_action = [(mode_of_distribution(policy_out[0]).cpu().numpy(), mode_of_distribution(policy_out[1]).cpu().numpy())]
             else:
                 batch_action = [(policy_out[0].sample().cpu().numpy()[0], policy_out[1].sample().cpu().numpy()[0])]
         return batch_action
