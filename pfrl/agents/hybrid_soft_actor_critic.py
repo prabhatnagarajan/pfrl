@@ -90,9 +90,12 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
         "policy_optimizer",
         "q_func1_optimizer",
         "q_func2_optimizer",
-        "temperature_holder",
-        "temperature_optimizer",
+        "c_temperature_holder",
+        "d_temperature_holder",
+        "c_temperature_optimizer",
+        "d_temperature_optimizer",
     )
+
 
     def __init__(
         self,
