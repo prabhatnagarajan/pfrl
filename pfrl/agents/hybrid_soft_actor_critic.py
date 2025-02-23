@@ -9,7 +9,7 @@ from torch.nn import functional as F
 
 import pfrl
 from pfrl.agent import AttributeSavingMixin, BatchAgent
-from pfrl.replay_buffer import ReplayUpdater, batch_experiences, hybrid_batch_experiences
+from pfrl.replay_buffer import ReplayUpdater, batch_experiences,hybrid_batch_experiences
 from pfrl.utils import clip_l2_grad_norm_
 from pfrl.utils.batch_states import batch_states
 from pfrl.utils.copy_param import synchronize_parameters
@@ -91,11 +91,10 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
         "q_func1_optimizer",
         "q_func2_optimizer",
         "c_temperature_holder",
-        "d_temperature_holder",
         "c_temperature_optimizer",
+        "d_temperature_holder",
         "d_temperature_optimizer",
     )
-
 
     def __init__(
         self,
@@ -118,8 +117,9 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
         batch_states=batch_states,
         burnin_action_func=None,
         initial_temperature=1.0,
-        c_entropy_target=None,
-        d_entropy_target=None,
+        # entropy_target=None,
+        c_entropy_target = None, 
+        d_entropy_target = None,
         temperature_optimizer_lr=None,
         act_deterministically=True,
     ):
@@ -158,12 +158,9 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
         self.batch_states = batch_states
         self.burnin_action_func = burnin_action_func
         self.initial_temperature = initial_temperature
-
-        #Alpha 
+        # self.entropy_target = entropy_target
         self.c_entropy_target = c_entropy_target
         self.d_entropy_target = d_entropy_target
-        
-        #Continuous
         if self.c_entropy_target is not None:
             self.c_temperature_holder = TemperatureHolder(
                 initial_log_temperature=np.log(initial_temperature)
@@ -181,8 +178,7 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
         else:
             self.c_temperature_holder = None
             self.c_temperature_optimizer = None
-        
-        #Discrete
+            
         if self.d_entropy_target is not None:
             self.d_temperature_holder = TemperatureHolder(
                 initial_log_temperature=np.log(initial_temperature)
@@ -200,7 +196,9 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
         else:
             self.d_temperature_holder = None
             self.d_temperature_optimizer = None
+        
         self.act_deterministically = act_deterministically
+
         self.t = 0
 
         # Target model
@@ -210,6 +208,7 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
         # Statistics
         self.q1_record = collections.deque(maxlen=1000)
         self.q2_record = collections.deque(maxlen=1000)
+        # self.entropy_record = collections.deque(maxlen=1000)
         self.c_entropy_record = collections.deque(maxlen=1000)
         self.d_entropy_record = collections.deque(maxlen=1000)
         self.q_func1_loss_record = collections.deque(maxlen=100)
@@ -219,19 +218,19 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
     @property
     def c_temperature(self):
         if self.c_entropy_target is None:
-            return self.c_initial_temperature
+            return self.initial_temperature
         else:
             with torch.no_grad():
                 return float(self.c_temperature_holder())
+    
     @property
     def d_temperature(self):
         if self.d_entropy_target is None:
-            return self.d_initial_temperature
+            return self.initial_temperature
         else:
             with torch.no_grad():
                 return float(self.d_temperature_holder())
-    
-    
+
     def sync_target_network(self):
         """Synchronize target network with current network."""
         synchronize_parameters(
@@ -263,33 +262,35 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
             self.target_q_func1
         ), pfrl.utils.evaluating(self.target_q_func2):
             # next_action_distrib = self.policy(batch_next_state)
-            next_c_action_distrib, next_d_action_distrib = self.policy(batch_next_state)
+            c_next_action_distrib, d_next_action_distrib = self.policy(batch_next_state)
             # next_actions = next_action_distrib.sample()
-            next_c_actions = next_c_action_distrib.sample()
-            next_d_actions = next_d_action_distrib.sample()
-            # next_log_prob = next_c_action_distrib.log_prob(next_actions)
-            next_c_log_prob = next_c_action_distrib.log_prob(next_c_actions)
-            next_d_log_prob = next_d_action_distrib.log_prob(next_d_actions)
-            
-            
+            # next_log_prob = next_action_distrib.log_prob(next_actions)
+            c_next_action  = c_next_action_distrib.sample()
+            d_next_action  = d_next_action_distrib.sample()
+            c_next_log_prob = c_next_action_distrib.log_prob(c_next_action)
+            d_next_log_prob = d_next_action_distrib.log_prob(d_next_action)
+            d_next_prob     = torch.exp(d_next_log_prob)
             # next_q1 = self.target_q_func1((batch_next_state, next_actions))
             # next_q2 = self.target_q_func2((batch_next_state, next_actions))
-            next_q1 = self.target_q_func1((batch_next_state, (next_c_actions , next_d_actions)))
-            next_q2 = self.target_q_func2((batch_next_state, (next_c_actions , next_d_actions)))
-            next_q = torch.min(next_q1, next_q2)
+            next_q1 = self.target_q_func1((batch_next_state, (c_next_action, d_next_action)))
+            next_q2 = self.target_q_func2((batch_next_state, (c_next_action, d_next_action)))
             
-            # entropy_term = self.temperature * next_log_prob[..., None]
-            entropy_term = (self.c_temperature * next_c_log_prob + self.d_temperature * next_d_log_prob)
+            next_q = torch.min(next_q1, next_q2)
+            # entropy_term = self.c_temperature * next_log_prob[..., None]
+            # entropy_term = self.c_temperature * c_next_log_prob + self.d_temperature * d_next_log_prob
+            entropy_term   = self.c_temperature * c_next_log_prob * d_next_prob + self.d_temperature * d_next_log_prob
             assert next_q.shape == entropy_term.shape
 
+            # target_q = batch_rewards + batch_discount * (
+            #     1.0 - batch_terminal
+            # ) * torch.flatten(next_q - entropy_term)
             target_q = batch_rewards + batch_discount * (
                 1.0 - batch_terminal
-            ) * torch.flatten(next_q - entropy_term)
-
-        # predict_q1 = torch.flatten(self.q_func1((batch_state, batch_actions)))
-        # predict_q2 = torch.flatten(self.q_func2((batch_state, batch_actions)))
+            ) * torch.flatten(next_q - entropy_term) * d_next_prob
+            
         predict_q1 = self.q_func1((batch_state, (batch_c_actions, batch_d_actions)))
         predict_q2 = self.q_func2((batch_state, (batch_c_actions, batch_d_actions)))
+
 
         loss1 = 0.5 * F.mse_loss(target_q, predict_q1)
         loss2 = 0.5 * F.mse_loss(target_q, predict_q2)
@@ -312,47 +313,63 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
             clip_l2_grad_norm_(self.q_func2.parameters(), self.max_grad_norm)
         self.q_func2_optimizer.step()
 
+    #Continuous update temperature
     def c_update_temperature(self, log_prob):
         assert not log_prob.requires_grad
-        loss = -torch.mean(self.c_temperature_holder() * (log_prob + self.c_entropy_target))
+        # loss = -torch.mean(self.temperature_holder() * (log_prob + self.entropy_target))
+        loss   = -torch.mean(self.c_temperature_holder() * (log_prob + self.c_entropy_target))
+        # self.temperature_optimizer.zero_grad()
         self.c_temperature_optimizer.zero_grad()
         loss.backward()
         if self.max_grad_norm is not None:
+            # clip_l2_grad_norm_(self.temperature_holder.parameters(), self.max_grad_norm)
             clip_l2_grad_norm_(self.c_temperature_holder.parameters(), self.max_grad_norm)
+        # self.temperature_optimizer.step()
         self.c_temperature_optimizer.step()
-
+    
+    #Discrete temperature
     def d_update_temperature(self, log_prob):
         assert not log_prob.requires_grad
-        loss = -torch.mean(self.d_temperature_holder() * (log_prob + self.d_entropy_target))
+        # loss = -torch.mean(self.temperature_holder() * (log_prob + self.entropy_target))
+        loss   = -torch.mean(self.d_temperature_holder() * (log_prob + self.d_entropy_target))
+        # self.temperature_optimizer.zero_grad()
         self.d_temperature_optimizer.zero_grad()
         loss.backward()
         if self.max_grad_norm is not None:
+            # clip_l2_grad_norm_(self.temperature_holder.parameters(), self.max_grad_norm)
             clip_l2_grad_norm_(self.d_temperature_holder.parameters(), self.max_grad_norm)
+        # self.temperature_optimizer.step()
         self.d_temperature_optimizer.step()
-    
-    
+
     def update_policy_and_temperature(self, batch):
         """Compute loss for actor."""
 
         batch_state = batch["state"]
 
+        # action_distrib = self.policy(batch_state)
         c_action_distrib, d_action_distrib = self.policy(batch_state)
-        c_actions = c_action_distrib.sample()
-        d_actions = d_action_distrib.sample()
         # actions = action_distrib.rsample()
+        # log_prob = action_distrib.log_prob(actions)
+        c_actions = c_action_distrib.rsample()
+        d_actions = d_action_distrib.sample()
         c_log_prob = c_action_distrib.log_prob(c_actions)
         d_log_prob = d_action_distrib.log_prob(d_actions)
-        # log_prob = action_distrib.log_prob(actions)
+        d_prob     = torch.exp(d_log_prob)
+        
         # q1 = self.q_func1((batch_state, actions))
         # q2 = self.q_func2((batch_state, actions))
-        q1 = self.q_func1((batch_state, (c_actions, d_actions)))
-        q2 = self.q_func2((batch_state, (c_actions, d_actions)))
+        q1   = self.q_func1((batch_state, (c_actions, d_actions)))
+        q2   = self.q_func2((batch_state, (c_actions, d_actions)))
         q = torch.min(q1, q2)
 
-        # entropy_term = self.temperature * log_prob[..., None]
-        entropy_term = (self.c_temperature * c_log_prob + self.d_temperature * d_log_prob)
-        assert q.shape == entropy_term.shape
-        loss = torch.mean(entropy_term - q)
+        # entropy_term = self.c_temperature * log_prob[..., None]
+        c_entropy_term = self.c_temperature * c_log_prob * d_prob
+        d_entropy_term = self.d_temperature * d_log_prob
+        # assert q.shape == entropy_term.shape
+        # loss = torch.mean(entropy_term - q)
+        loss_d = torch.mean(d_prob * (d_entropy_term - q)) 
+        loss_c = torch.mean(d_prob * (c_entropy_term - q)) 
+        loss = loss_c + loss_d
 
         self.policy_optimizer.zero_grad()
         loss.backward()
@@ -364,7 +381,6 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
 
         if self.c_entropy_target is not None:
             self.c_update_temperature(c_log_prob.detach())
-        
         if self.d_entropy_target is not None:
             self.d_update_temperature(d_log_prob.detach())
 
@@ -379,9 +395,10 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
                 )
             except NotImplementedError:
                 # Record - log p(x) instead
+                # self.entropy_record.extend(-log_prob.detach().cpu().numpy())
                 self.c_entropy_record.extend(-c_log_prob.detach().cpu().numpy())
                 self.d_entropy_record.extend(-d_log_prob.detach().cpu().numpy())
-    
+
     def update(self, experiences, errors_out=None):
         """Update the model from experiences"""
         batch = hybrid_batch_experiences(experiences, self.device, self.phi, self.gamma)
@@ -434,10 +451,10 @@ class HybridSoftActorCritic(AttributeSavingMixin, BatchAgent):
                 assert self.batch_last_action[i] is not None
                 # Add a transition to the replay buffer
                 self.replay_buffer.append(
-                    state=self.batch_last_obs[i].astype(np.uint8),
+                    state=self.batch_last_obs[i],
                     action=self.batch_last_action[i],
                     reward=batch_reward[i],
-                    next_state=batch_obs[i].astype(np.uint8),
+                    next_state=batch_obs[i],
                     next_action=None,
                     is_state_terminal=batch_done[i],
                     env_id=i,
