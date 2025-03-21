@@ -22,6 +22,112 @@ def ask_and_save_agent_replay_buffer(agent, t, outdir, suffix=""):
     ):  # NOQA
         save_agent_replay_buffer(agent, t, outdir, suffix=suffix)
 
+def train_agent_continuing(
+    agent,
+    env,
+    steps,
+    outdir,
+    checkpoint_freq=None,
+    max_episode_len=None,
+    step_offset=0,
+    evaluator=None,
+    successful_score=None,
+    step_hooks=(),
+    eval_during_episode=False,
+    logger=None,
+    wandb_logging=False, 
+):
+
+    logger = logger or logging.getLogger(__name__)
+
+    episode_r = 0
+    episode_idx = 0
+
+    # o_0, r_0
+    obs , info = env.reset()
+
+    t = step_offset
+    if hasattr(agent, "t"):
+        agent.t = step_offset
+
+    eval_stats_history = []  # List of evaluation episode stats dict
+    episode_len = 0
+    try:
+        start = time.time()
+        while t < steps:
+            # a_t            
+            action = agent.act(obs)
+            # o_{t+1}, r_{t+1}
+            obs, r, terminated, truncated, info = env.step(action)
+            
+            t += 1
+            episode_r += info['untransformed_rewards']
+            episode_len += 1
+            reset = episode_len == max_episode_len or info.get("needs_reset", False) or truncated
+            agent.observe(obs, r, terminated, reset)
+
+            for hook in step_hooks:
+                hook(env, agent, t)
+
+            episode_end = terminated or reset or t == steps
+
+            logger.info(
+                "outdir:%s step:%s episode:%s R:%s",
+                outdir,
+                t,
+                episode_idx,
+                episode_r,
+            )
+            stats = agent.get_statistics()
+            logger.info("statistics:%s", stats)
+            episode_idx += 1
+
+            if evaluator is not None and (episode_end or eval_during_episode):
+                eval_score = evaluator.evaluate_if_necessary(t=t, episodes=episode_idx)
+                if eval_score is not None:
+                    eval_stats = dict(agent.get_statistics())
+                    eval_stats["eval_score"] = eval_score
+                    eval_stats_history.append(eval_stats)
+                if (
+                    successful_score is not None
+                    and evaluator.max_score >= successful_score
+                ):
+                    break
+
+            if t == steps:
+                break
+            print("SPS: " , episode_len / (time.time() - start))
+            start = time.time()
+            # Start a new episode
+            # Save episodic reward in a CSV file
+            csv_filename = os.path.join(outdir, "episodic_rewards.csv")
+            file_exists = os.path.isfile(csv_filename)
+
+            with open(csv_filename, mode='a', newline='') as csv_file:
+                fieldnames = ['episode', 'reward']
+                writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow({'episode': episode_idx, 'reward': episode_r})
+                if wandb_logging:
+                    import wandb
+                    wandb.log({'episode': episode_idx, 'reward': episode_r})
+                
+            if checkpoint_freq and t % checkpoint_freq == 0:
+                save_agent(agent, t, outdir, logger, suffix="_checkpoint")
+
+    except (Exception, KeyboardInterrupt):
+        # Save the current model before being killed
+        save_agent(agent, t, outdir, logger, suffix="_except")
+        raise
+
+    # Save the final model
+    save_agent(agent, t, outdir, logger, suffix="_finish")
+
+    return eval_stats_history
+
+
+
 
 def train_agent(
     agent,
@@ -36,6 +142,7 @@ def train_agent(
     step_hooks=(),
     eval_during_episode=False,
     logger=None,
+    wandb_logging=False, 
 ):
     logger = logger or logging.getLogger(__name__)
 
@@ -110,6 +217,9 @@ def train_agent(
                     if not file_exists:
                         writer.writeheader()
                     writer.writerow({'episode': episode_idx, 'reward': episode_r})
+                    if wandb_logging:
+                        import wandb
+                        wandb.log({'episode': episode_idx, 'reward': episode_r})
                 
                 episode_r = 0
                 episode_len = 0
@@ -148,6 +258,8 @@ def train_agent_with_evaluation(
     use_tensorboard=False,
     eval_during_episode=False,
     logger=None,
+    wandb_logging = False,
+    case = "episodic", # episodic or continuing 
 ):
     """Train an agent while periodically evaluating it.
 
@@ -220,19 +332,37 @@ def train_agent_with_evaluation(
         logger=logger,
     )
 
-    eval_stats_history = train_agent(
-        agent,
-        env,
-        steps,
-        outdir,
-        checkpoint_freq=checkpoint_freq,
-        max_episode_len=train_max_episode_len,
-        step_offset=step_offset,
-        evaluator=evaluator,
-        successful_score=successful_score,
-        step_hooks=step_hooks,
-        eval_during_episode=eval_during_episode,
-        logger=logger,
-    )
+    if case == "continuing":
+        eval_stats_history = train_agent_continuing(
+            agent,
+            env,
+            steps,
+            outdir,
+            checkpoint_freq=checkpoint_freq,
+            max_episode_len=train_max_episode_len,
+            step_offset=step_offset,
+            evaluator=evaluator,
+            successful_score=successful_score,
+            step_hooks=step_hooks,
+            eval_during_episode=eval_during_episode,
+            logger=logger,
+            wandb_logging=wandb_logging
+        )
+    else:
+        eval_stats_history = train_agent(
+            agent,
+            env,
+            steps,
+            outdir,
+            checkpoint_freq=checkpoint_freq,
+            max_episode_len=train_max_episode_len,
+            step_offset=step_offset,
+            evaluator=evaluator,
+            successful_score=successful_score,
+            step_hooks=step_hooks,
+            eval_during_episode=eval_during_episode,
+            logger=logger,
+            wandb_logging=wandb_logging
+        )
 
     return agent, eval_stats_history
