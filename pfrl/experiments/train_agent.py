@@ -82,17 +82,17 @@ def train_agent_continuing(
             logger.info("statistics:%s", stats)
             episode_idx += 1
 
-            if evaluator is not None and (episode_end or eval_during_episode):
-                eval_score = evaluator.evaluate_if_necessary(t=t, episodes=episode_idx)
-                if eval_score is not None:
-                    eval_stats = dict(agent.get_statistics())
-                    eval_stats["eval_score"] = eval_score
-                    eval_stats_history.append(eval_stats)
-                if (
-                    successful_score is not None
-                    and evaluator.max_score >= successful_score
-                ):
-                    break
+            # if evaluator is not None and (episode_end or eval_during_episode):
+            #     eval_score = evaluator.evaluate_if_necessary(t=t, episodes=episode_idx)
+            #     if eval_score is not None:
+            #         eval_stats = dict(agent.get_statistics())
+            #         eval_stats["eval_score"] = eval_score
+            #         eval_stats_history.append(eval_stats)
+            #     if (
+            #         successful_score is not None
+            #         and evaluator.max_score >= successful_score
+            #     ):
+            #         break
 
             if t == steps:
                 break
