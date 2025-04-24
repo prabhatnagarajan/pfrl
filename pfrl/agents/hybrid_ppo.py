@@ -131,8 +131,8 @@ def _add_log_prob_and_value_to_episodes(
         # actions = torch.tensor([b["action"] for b in dataset], device=device)
         # log_probs = distribs.log_prob(actions).cpu().numpy()
         #Hybrid_actions
-        c_actions = torch.tensor([b["action"][0] for b in dataset], device=device)
-        d_actions = torch.tensor([b["action"][1] for b in dataset], device=device)
+        c_actions = torch.tensor(np.array( [b["action"][0] for b in dataset] ), device=device)
+        d_actions = torch.tensor(np.array( [b["action"][1] for b in dataset] ), device=device)
         
         c_log_probs = distribs[0].log_prob(c_actions).cpu().numpy()
         d_log_probs = distribs[1].log_prob(d_actions).cpu().numpy()
