@@ -94,7 +94,7 @@ def train_agent_continuing(
             #     ):
             #         break
 
-            if t == steps:
+            if t == steps or episode_end:
                 break
             print("SPS: " , episode_len / (time.time() - start))
             start = time.time()
