@@ -62,7 +62,6 @@ def train_agent_continuing(
             obs, r, terminated, truncated, info = env.step(action)
             
             t += 1
-            episode_r += info['untransformed_rewards']
             total_reward += info['untransformed_rewards']  # Accumulate total reward
             episode_len += 1
             reset = episode_len == max_episode_len or info.get("needs_reset", False) or truncated
@@ -70,6 +69,9 @@ def train_agent_continuing(
 
             for hook in step_hooks:
                 hook(env, agent, t)
+                
+            episode_idx += 1
+
 
             episode_end = terminated or reset or t == steps
 
@@ -78,31 +80,31 @@ def train_agent_continuing(
                 outdir,
                 t,
                 episode_idx,
-                episode_r,
+                total_reward,
             )
             stats = agent.get_statistics()
             logger.info("statistics:%s", stats)
-            episode_idx += 1
 
             if t == steps or episode_end:
                 break
-            print("SPS: " , episode_len / (time.time() - start))
-            start = time.time()
-            # Start a new episode
-            # Save episodic reward in a CSV file
-            csv_filename = os.path.join(outdir, "episodic_rewards.csv")
-            file_exists = os.path.isfile(csv_filename)
 
-            with open(csv_filename, mode='a', newline='') as csv_file:
-                fieldnames = ['episode', 'reward', 'average_reward']
-                writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-                if not file_exists:
-                    writer.writeheader()
-                average_reward = total_reward / (episode_idx if episode_idx > 0 else 1)
-                writer.writerow({'episode': episode_idx, 'reward': episode_r, 'average_reward': average_reward})
-                if wandb_logging:
-                    import wandb
-                    wandb.log({'episode': episode_idx, 'reward': episode_r, 'average_reward': average_reward})
+            if t % 100 == 0:  # Save values every 100 steps
+                print("SPS: ", episode_len / (time.time() - start))
+                start = time.time()
+                # Save episodic reward in a CSV file
+                csv_filename = os.path.join(outdir, "episodic_rewards.csv")
+                file_exists = os.path.isfile(csv_filename)
+
+                with open(csv_filename, mode='a', newline='') as csv_file:
+                    fieldnames = ['step', 'episode', 'reward', 'average_reward']
+                    writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+                    if not file_exists:
+                        writer.writeheader()
+                    average_reward = total_reward / (episode_idx if episode_idx > 0 else 1)
+                    writer.writerow({'step': t, 'episode': episode_idx, 'reward': total_reward, 'average_reward': average_reward})
+                    if wandb_logging:
+                        import wandb
+                        wandb.log({'step': t, 'episode': episode_idx, 'reward': total_reward, 'average_reward': average_reward})
                 
             if checkpoint_freq and t % checkpoint_freq == 0:
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
