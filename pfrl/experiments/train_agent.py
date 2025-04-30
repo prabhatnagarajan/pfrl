@@ -75,20 +75,19 @@ def train_agent_continuing(
 
             episode_end = terminated or reset or t == steps
 
-            logger.info(
+            if t == steps or episode_end:
+                break
+
+            if t % 100 == 0:  # Save values every 100 steps
+                logger.info(
                 "outdir:%s step:%s episode:%s R:%s",
                 outdir,
                 t,
                 episode_idx,
                 total_reward,
-            )
-            stats = agent.get_statistics()
-            logger.info("statistics:%s", stats)
-
-            if t == steps or episode_end:
-                break
-
-            if t % 100 == 0:  # Save values every 100 steps
+                )
+                stats = agent.get_statistics()
+                logger.info("statistics:%s", stats)
                 print("SPS: ", episode_len / (time.time() - start))
                 start = time.time()
                 # Save episodic reward in a CSV file
