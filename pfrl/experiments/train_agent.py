@@ -42,6 +42,7 @@ def train_agent_continuing(
 
     episode_r = 0
     episode_idx = 0
+    total_reward = 0  # To calculate average reward
 
     # o_0, r_0
     obs , info = env.reset()
@@ -62,6 +63,7 @@ def train_agent_continuing(
             
             t += 1
             episode_r += info['untransformed_rewards']
+            total_reward += info['untransformed_rewards']  # Accumulate total reward
             episode_len += 1
             reset = episode_len == max_episode_len or info.get("needs_reset", False) or truncated
             agent.observe(obs, r, terminated, reset)
@@ -82,18 +84,6 @@ def train_agent_continuing(
             logger.info("statistics:%s", stats)
             episode_idx += 1
 
-            # if evaluator is not None and (episode_end or eval_during_episode):
-            #     eval_score = evaluator.evaluate_if_necessary(t=t, episodes=episode_idx)
-            #     if eval_score is not None:
-            #         eval_stats = dict(agent.get_statistics())
-            #         eval_stats["eval_score"] = eval_score
-            #         eval_stats_history.append(eval_stats)
-            #     if (
-            #         successful_score is not None
-            #         and evaluator.max_score >= successful_score
-            #     ):
-            #         break
-
             if t == steps or episode_end:
                 break
             print("SPS: " , episode_len / (time.time() - start))
@@ -104,14 +94,15 @@ def train_agent_continuing(
             file_exists = os.path.isfile(csv_filename)
 
             with open(csv_filename, mode='a', newline='') as csv_file:
-                fieldnames = ['episode', 'reward']
+                fieldnames = ['episode', 'reward', 'average_reward']
                 writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
                 if not file_exists:
                     writer.writeheader()
-                writer.writerow({'episode': episode_idx, 'reward': episode_r})
+                average_reward = total_reward / (episode_idx if episode_idx > 0 else 1)
+                writer.writerow({'episode': episode_idx, 'reward': episode_r, 'average_reward': average_reward})
                 if wandb_logging:
                     import wandb
-                    wandb.log({'episode': episode_idx, 'reward': episode_r})
+                    wandb.log({'episode': episode_idx, 'reward': episode_r, 'average_reward': average_reward})
                 
             if checkpoint_freq and t % checkpoint_freq == 0:
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
