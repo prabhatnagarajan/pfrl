@@ -5,3 +5,4 @@ from pfrl.explorers.epsilon_greedy import ConstantEpsilonGreedy  # NOQA
 from pfrl.explorers.epsilon_greedy import ExponentialDecayEpsilonGreedy  # NOQA
 from pfrl.explorers.epsilon_greedy import LinearDecayEpsilonGreedy  # NOQA
 from pfrl.explorers.greedy import Greedy  # NOQA
+from pfrl.explorers.epsilon_greedy import EZGreedy  # NOQA
