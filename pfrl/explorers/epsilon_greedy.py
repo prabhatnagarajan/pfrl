@@ -182,7 +182,7 @@ class EZGreedy(explorer.Explorer):
         self.decay_steps = decay_steps
         self.random_action_func = random_action_func
         # self.greedy_action_func = greedy_action_func
-        self.duration_sampler = power_law_duration_sampler()
+        self.duration_sampler = power_law_duration_sampler
         self.logger = logger
 
         self.epsilon = start_epsilon
