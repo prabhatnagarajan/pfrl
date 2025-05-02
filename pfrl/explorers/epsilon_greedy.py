@@ -132,3 +132,177 @@ class ExponentialDecayEpsilonGreedy(explorer.Explorer):
 
     def __repr__(self):
         return "ExponentialDecayEpsilonGreedy(epsilon={})".format(self.epsilon)
+
+
+# import numpy as np
+# from logging import getLogger
+
+# class TemporallyExtendedEpsilonGreedy(explorer.Explorer):
+#     """
+#     Temporally-Extended ε-Greedy with linearly decayed epsilon.
+
+#     Args:
+#         start_epsilon (float): Initial value of epsilon.
+#         end_epsilon (float): Final value of epsilon.
+#         decay_steps (int): Number of steps over which epsilon decays.
+#         random_action_func (callable): Function that returns a random action.
+#         duration_sampler (callable): Function that samples the duration for repeating an exploratory action.
+#         logger (logging.Logger): Logger instance for debugging.
+#     """
+
+#     def __init__(
+#         self,
+#         start_epsilon,
+#         end_epsilon,
+#         decay_steps,
+#         random_action_func,
+#         duration_sampler,
+#         logger=getLogger(__name__),
+#     ):
+#         assert 0 <= start_epsilon <= 1, "start_epsilon must be in [0, 1]"
+#         assert 0 <= end_epsilon <= 1, "end_epsilon must be in [0, 1]"
+#         assert decay_steps >= 0, "decay_steps must be non-negative"
+#         self.start_epsilon = start_epsilon
+#         self.end_epsilon = end_epsilon
+#         self.decay_steps = decay_steps
+#         self.random_action_func = random_action_func
+#         self.duration_sampler = duration_sampler
+#         self.logger = logger
+#         self.epsilon = start_epsilon
+#         self.n = 0  # Remaining duration for the current exploratory action
+#         self.omega = None  # Current exploratory action
+
+#     def compute_epsilon(self, t):
+#         """Compute the decayed epsilon value at time step t."""
+#         if t >= self.decay_steps:
+#             return self.end_epsilon
+#         else:
+#             epsilon_diff = self.end_epsilon - self.start_epsilon
+#             return self.start_epsilon + epsilon_diff * (t / self.decay_steps)
+
+#     def select_action(self, t, greedy_action_func, action_value=None):
+#         """
+#         Select an action based on the TE-ε-Greedy strategy.
+
+#         Args:
+#             t (int): Current time step.
+#             greedy_action_func (callable): Function that returns the greedy action.
+#             action_value: Not used in this implementation.
+
+#         Returns:
+#             action: Selected action.
+#         """
+#         self.epsilon = self.compute_epsilon(t)
+
+#         if self.n == 0:
+#             if np.random.rand() < self.epsilon:
+#                 # Start a new exploratory action
+#                 self.n = self.duration_sampler()
+#                 self.omega = self.random_action_func()
+#                 action = self.omega
+#                 greedy = False
+#             else:
+#                 # Select the greedy action
+#                 action = greedy_action_func()
+#                 greedy = True
+#         else:
+#             # Continue with the current exploratory action
+#             action = self.omega
+#             self.n -= 1
+#             greedy = False
+
+#         # action_type = "greedy" if greedy else "non-greedy"
+#         # self.logger.debug("t:%s a:%s %s", t, action, action_type)
+#         return action
+
+#     def __repr__(self):
+#         return f"TemporallyExtendedEpsilonGreedy(epsilon={self.epsilon})"
+
+
+def power_law_duration_sampler(mu=2.0, max_duration=10000):
+    """
+    Sample duration n ~ z(n) ∝ n^{-μ} using inverse transform sampling.
+
+    Args:
+        mu (float): Power-law exponent.
+        max_duration (int): Maximum cap for duration.
+
+    Returns:
+        int: Sampled duration (≥1).
+    """
+    # Sample from discrete power law using inverse CDF
+    u = np.random.uniform()
+    n = int((1 / u) ** (1 / (mu - 1)))
+    return min(max(1, n), max_duration)
+
+
+class EZGreedy(explorer.Explorer):
+    """
+    εz-Greedy exploration policy with linearly decayed epsilon and temporally extended exploration.
+
+    Args:
+        start_epsilon (float): Initial value of epsilon.
+        end_epsilon (float): Final value of epsilon.
+        decay_steps (int): Number of steps over which epsilon decays.
+        random_action_func (callable): Function that returns a random action.
+        greedy_action_func (callable): Function that returns the greedy action.
+        duration_sampler (callable): Function that samples the exploratory duration n ~ z.
+        logger (logging.Logger): Logger instance for debug output.
+    """
+
+    def __init__(
+        self,
+        start_epsilon,
+        end_epsilon,
+        decay_steps,
+        random_action_func,
+        # greedy_action_func,
+        # duration_sampler,
+        logger=getLogger(__name__),
+    ):
+        assert 0 <= start_epsilon <= 1
+        assert 0 <= end_epsilon <= 1
+        assert decay_steps >= 0
+        self.start_epsilon = start_epsilon
+        self.end_epsilon = end_epsilon
+        self.decay_steps = decay_steps
+        self.random_action_func = random_action_func
+        # self.greedy_action_func = greedy_action_func
+        self.duration_sampler = power_law_duration_sampler()
+        self.logger = logger
+
+        self.epsilon = start_epsilon
+        self.n = 0            # Remaining duration of exploratory action
+        self.omega = None     # Current exploratory action
+
+    def compute_epsilon(self, t):
+        if t >= self.decay_steps:
+            return self.end_epsilon
+        return self.start_epsilon + (self.end_epsilon - self.start_epsilon) * (t / self.decay_steps)
+
+    def select_action(self, t, greedy_action_func=None, action_value=None):
+        self.epsilon = self.compute_epsilon(t)
+
+        if self.n == 0:
+            if np.random.rand() <= self.epsilon:
+                # Exploration phase
+                self.n = self.duration_sampler()
+                self.omega = self.random_action_func()
+                a = self.omega
+                greedy = False
+            else:
+                # Greedy phase
+                a = greedy_action_func()
+                greedy = True
+        else:
+            # Continue exploratory action
+            a = self.omega
+            self.n -= 1
+            greedy = False
+
+        # greedy_str = "greedy" if greedy else "non-greedy"
+        # self.logger.debug("t:%s a:%s %s n:%s", t, a, greedy_str, self.n)
+        return a
+
+    def __repr__(self):
+        return f"EZGreedy(epsilon={self.epsilon})"
