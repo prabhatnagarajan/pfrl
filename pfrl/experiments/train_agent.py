@@ -109,7 +109,7 @@ def train_agent_continuing(
             if checkpoint_freq and t % checkpoint_freq == 0:
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
                 if env_checkpointable:
-                    ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_checkpoint")
+                    save_agent_replay_buffer(agent, t, outdir, suffix="_checkpoint")
                     # Save the environment state
                     name = os.path.join(outdir, "checkpoint_{}".format(t))
                     env.save_env_state(name)
@@ -118,7 +118,7 @@ def train_agent_continuing(
         # Save the current model before being killed
         save_agent(agent, t, outdir, logger, suffix="_except")
         if env_checkpointable:
-            ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_except")
+            save_agent_replay_buffer(agent, t, outdir, suffix="_except")
             name = os.path.join(outdir, "checkpoint_{}".format(t))
             env.save_env_state(name)
         raise
@@ -126,7 +126,7 @@ def train_agent_continuing(
     # Save the final model
     save_agent(agent, t, outdir, logger, suffix="_finish")
     if env_checkpointable:
-        ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_finish")
+        save_agent_replay_buffer(agent, t, outdir, suffix="_finish")
         # Save the environment state
         name = os.path.join(outdir, "finish_{}".format(t))
         env.save_env_state(name)
@@ -234,7 +234,7 @@ def train_agent(
             if checkpoint_freq and t % checkpoint_freq == 0:
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
                 if env_checkpointable:
-                    ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_checkpoint")
+                    save_agent_replay_buffer(agent, t, outdir, suffix="_checkpoint")
                     # Save the environment state
                     name = os.path.join(outdir, "checkpoint_{}".format(t))
                     env.save_env_state(name)
@@ -243,7 +243,7 @@ def train_agent(
         # Save the current model before being killed
         save_agent(agent, t, outdir, logger, suffix="_except")
         if env_checkpointable:
-            ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_except")
+            save_agent_replay_buffer(agent, t, outdir, suffix="_except")
             name = os.path.join(outdir, "checkpoint_{}".format(t))
             env.save_env_state(name)
         raise
@@ -251,7 +251,7 @@ def train_agent(
     # Save the final model
     save_agent(agent, t, outdir, logger, suffix="_finish")
     if env_checkpointable:
-        ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_finish")
+        save_agent_replay_buffer(agent, t, outdir, suffix="_finish")
         # Save the environment state
         name = os.path.join(outdir, "finish_{}".format(t))
         env.save_env_state(name)
