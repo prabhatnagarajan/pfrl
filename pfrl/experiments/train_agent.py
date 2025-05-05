@@ -36,6 +36,7 @@ def train_agent_continuing(
     eval_during_episode=False,
     logger=None,
     wandb_logging=False, 
+    env_checkpointable=False,
 ):
 
     logger = logger or logging.getLogger(__name__)
@@ -107,15 +108,28 @@ def train_agent_continuing(
                 
             if checkpoint_freq and t % checkpoint_freq == 0:
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
+                if env_checkpointable:
+                    ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_checkpoint")
+                    # Save the environment state
+                    name = os.path.join(outdir, "checkpoint_{}".format(t))
+                    env.save_env_state(name)
 
     except (Exception, KeyboardInterrupt):
         # Save the current model before being killed
         save_agent(agent, t, outdir, logger, suffix="_except")
+        if env_checkpointable:
+            ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_except")
+            name = os.path.join(outdir, "checkpoint_{}".format(t))
+            env.save_env_state(name)
         raise
 
     # Save the final model
     save_agent(agent, t, outdir, logger, suffix="_finish")
-
+    if env_checkpointable:
+        ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_finish")
+        # Save the environment state
+        name = os.path.join(outdir, "finish_{}".format(t))
+        env.save_env_state(name)
     return eval_stats_history
 
 
@@ -135,6 +149,7 @@ def train_agent(
     eval_during_episode=False,
     logger=None,
     wandb_logging=False, 
+    env_checkpointable=False,
 ):
     logger = logger or logging.getLogger(__name__)
 
@@ -218,14 +233,28 @@ def train_agent(
                 obs, info = env.reset()
             if checkpoint_freq and t % checkpoint_freq == 0:
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
+                if env_checkpointable:
+                    ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_checkpoint")
+                    # Save the environment state
+                    name = os.path.join(outdir, "checkpoint_{}".format(t))
+                    env.save_env_state(name)
 
     except (Exception, KeyboardInterrupt):
         # Save the current model before being killed
         save_agent(agent, t, outdir, logger, suffix="_except")
+        if env_checkpointable:
+            ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_except")
+            name = os.path.join(outdir, "checkpoint_{}".format(t))
+            env.save_env_state(name)
         raise
 
     # Save the final model
     save_agent(agent, t, outdir, logger, suffix="_finish")
+    if env_checkpointable:
+        ask_and_save_agent_replay_buffer(agent, t, outdir, suffix="_finish")
+        # Save the environment state
+        name = os.path.join(outdir, "finish_{}".format(t))
+        env.save_env_state(name)
 
     return eval_stats_history
 
@@ -252,6 +281,7 @@ def train_agent_with_evaluation(
     logger=None,
     wandb_logging = False,
     case = "episodic", # episodic or continuing 
+    env_checkpointable = False,
 ):
     """Train an agent while periodically evaluating it.
 
@@ -338,7 +368,8 @@ def train_agent_with_evaluation(
             step_hooks=step_hooks,
             eval_during_episode=eval_during_episode,
             logger=logger,
-            wandb_logging=wandb_logging
+            wandb_logging=wandb_logging, 
+            env_checkpointable=env_checkpointable
         )
     else:
         eval_stats_history = train_agent(
@@ -354,7 +385,8 @@ def train_agent_with_evaluation(
             step_hooks=step_hooks,
             eval_during_episode=eval_during_episode,
             logger=logger,
-            wandb_logging=wandb_logging
+            wandb_logging=wandb_logging,
+            env_checkpointable=env_checkpointable
         )
 
     return agent, eval_stats_history
