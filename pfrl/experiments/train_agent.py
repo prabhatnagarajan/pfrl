@@ -37,6 +37,7 @@ def train_agent_continuing(
     logger=None,
     wandb_logging=False, 
     env_checkpointable=False,
+    buffer_checkpointable=False,
 ):
 
     logger = logger or logging.getLogger(__name__)
@@ -110,6 +111,7 @@ def train_agent_continuing(
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
                 if env_checkpointable:
                     dirname = os.path.join(outdir, "{}{}".format(t, '_checkpoint'))
+                if buffer_checkpointable:
                     save_agent_replay_buffer(agent, t, dirname, suffix="_checkpoint")
                     # Save the environment state
                     name = os.path.join(dirname, "checkpoint_{}.json".format(t))
@@ -120,6 +122,7 @@ def train_agent_continuing(
         save_agent(agent, t, outdir, logger, suffix="_except")
         if env_checkpointable:
             dirname = os.path.join(outdir, "{}{}".format(t, '_except'))
+        if buffer_checkpointable:
             save_agent_replay_buffer(agent, t, dirname, suffix="_except")
             # Save the environment state
             name = os.path.join(dirname, "except_{}.json".format(t))
@@ -130,7 +133,8 @@ def train_agent_continuing(
     save_agent(agent, t, outdir, logger, suffix="_finish")
     if env_checkpointable:
         dirname = os.path.join(outdir, "{}{}".format(t, '_finish'))
-        save_agent_replay_buffer(agent, t, dirname, suffix="_finish")
+        if buffer_checkpointable:
+            save_agent_replay_buffer(agent, t, dirname, suffix="_finish")
         # Save the environment state
         name = os.path.join(dirname, "finish_{}.json".format(t))
         env.save_env_state(name)
@@ -290,6 +294,7 @@ def train_agent_with_evaluation(
     wandb_logging = False,
     case = "episodic", # episodic or continuing 
     env_checkpointable = False,
+    buffer_checkpointable = False,
 ):
     """Train an agent while periodically evaluating it.
 
@@ -377,7 +382,8 @@ def train_agent_with_evaluation(
             eval_during_episode=eval_during_episode,
             logger=logger,
             wandb_logging=wandb_logging, 
-            env_checkpointable=env_checkpointable
+            env_checkpointable=env_checkpointable, 
+            buffer_checkpointable=buffer_checkpointable,
         )
     else:
         eval_stats_history = train_agent(
