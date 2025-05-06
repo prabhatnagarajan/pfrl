@@ -111,33 +111,35 @@ def train_agent_continuing(
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
                 if env_checkpointable:
                     dirname = os.path.join(outdir, "{}{}".format(t, '_checkpoint'))
-                if buffer_checkpointable:
-                    save_agent_replay_buffer(agent, t, dirname, suffix="_checkpoint")
                     # Save the environment state
                     name = os.path.join(dirname, "checkpoint_{}.json".format(t))
                     env.save_env_state(name)
+                if buffer_checkpointable:
+                    save_agent_replay_buffer(agent, t, dirname, suffix="_checkpoint")
 
     except (Exception, KeyboardInterrupt):
         # Save the current model before being killed
         save_agent(agent, t, outdir, logger, suffix="_except")
         if env_checkpointable:
             dirname = os.path.join(outdir, "{}{}".format(t, '_except'))
-        if buffer_checkpointable:
-            save_agent_replay_buffer(agent, t, dirname, suffix="_except")
             # Save the environment state
             name = os.path.join(dirname, "except_{}.json".format(t))
             env.save_env_state(name)
+
+        if buffer_checkpointable:
+            save_agent_replay_buffer(agent, t, dirname, suffix="_except")
+
         raise
 
     # Save the final model
     save_agent(agent, t, outdir, logger, suffix="_finish")
     if env_checkpointable:
         dirname = os.path.join(outdir, "{}{}".format(t, '_finish'))
-        if buffer_checkpointable:
-            save_agent_replay_buffer(agent, t, dirname, suffix="_finish")
         # Save the environment state
         name = os.path.join(dirname, "finish_{}.json".format(t))
         env.save_env_state(name)
+    if buffer_checkpointable:
+            save_agent_replay_buffer(agent, t, dirname, suffix="_finish")
     return eval_stats_history
 
 
@@ -158,6 +160,7 @@ def train_agent(
     logger=None,
     wandb_logging=False, 
     env_checkpointable=False,
+    buffer_checkpointable=False,
 ):
     logger = logger or logging.getLogger(__name__)
 
@@ -243,30 +246,33 @@ def train_agent(
                 save_agent(agent, t, outdir, logger, suffix="_checkpoint")
                 if env_checkpointable:
                     dirname = os.path.join(outdir, "{}{}".format(t, '_checkpoint'))
-                    save_agent_replay_buffer(agent, t, dirname, suffix="_checkpoint")
                     # Save the environment state
                     name = os.path.join(dirname, "checkpoint_{}.json".format(t))
                     env.save_env_state(name)
+                if buffer_checkpointable:
+                    save_agent_replay_buffer(agent, t, dirname, suffix="_checkpoint")
 
     except (Exception, KeyboardInterrupt):
         # Save the current model before being killed
         save_agent(agent, t, outdir, logger, suffix="_except")
         if env_checkpointable:
             dirname = os.path.join(outdir, "{}{}".format(t, '_except'))
-            save_agent_replay_buffer(agent, t, dirname, suffix="_except")
             # Save the environment state
             name = os.path.join(dirname, "except_{}.json".format(t))
             env.save_env_state(name)
+        if buffer_checkpointable:
+            save_agent_replay_buffer(agent, t, dirname, suffix="_except")
         raise
 
     # Save the final model
     save_agent(agent, t, outdir, logger, suffix="_finish")
     if env_checkpointable:
         dirname = os.path.join(outdir, "{}{}".format(t, '_finish'))
-        save_agent_replay_buffer(agent, t, dirname, suffix="_finish")
         # Save the environment state
         name = os.path.join(dirname, "finish_{}.json".format(t))
         env.save_env_state(name)
+    if buffer_checkpointable:
+        save_agent_replay_buffer(agent, t, dirname, suffix="_finish")
 
     return eval_stats_history
 
