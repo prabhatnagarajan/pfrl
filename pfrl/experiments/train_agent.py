@@ -230,14 +230,14 @@ def train_agent(
                 file_exists = os.path.isfile(csv_filename)
 
                 with open(csv_filename, mode='a', newline='') as csv_file:
-                    fieldnames = ['episode', 'reward']
+                    fieldnames = ['episode', 'steps', 'reward']
                     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
                     if not file_exists:
                         writer.writeheader()
-                    writer.writerow({'episode': episode_idx, 'reward': episode_r})
+                    writer.writerow({'episode': episode_idx,'steps': t , 'reward': episode_r})
                     if wandb_logging:
                         import wandb
-                        wandb.log({'episode': episode_idx, 'reward': episode_r})
+                        writer.writerow({'episode': episode_idx,'steps': t , 'reward': episode_r})
                 
                 episode_r = 0
                 episode_len = 0
