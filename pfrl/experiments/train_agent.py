@@ -39,13 +39,14 @@ def train_agent_continuing(
     env_checkpointable=False,
     buffer_checkpointable=False,
     load_env_state=False,
+    total_reward_so_far = 0,
 ):
 
     logger = logger or logging.getLogger(__name__)
 
     episode_r = 0
     episode_idx = 0
-    total_reward = 0  # To calculate average reward
+    total_reward = total_reward_so_far  # To calculate average reward
 
     # o_0, r_0
     obs , info = env.reset()
@@ -307,6 +308,7 @@ def train_agent_with_evaluation(
     env_checkpointable = False,
     buffer_checkpointable = False,
     load_env_state = False,
+    total_reward_so_far = 0,
 ):
     """Train an agent while periodically evaluating it.
 
@@ -396,7 +398,8 @@ def train_agent_with_evaluation(
             wandb_logging=wandb_logging, 
             env_checkpointable=env_checkpointable, 
             buffer_checkpointable=buffer_checkpointable,
-            load_env_state= load_env_state
+            load_env_state= load_env_state, 
+            total_reward_so_far= total_reward_so_far,
         )
     else:
         eval_stats_history = train_agent(
