@@ -38,6 +38,7 @@ def train_agent_continuing(
     wandb_logging=False, 
     env_checkpointable=False,
     buffer_checkpointable=False,
+    load_env_state=False,
 ):
 
     logger = logger or logging.getLogger(__name__)
@@ -48,6 +49,10 @@ def train_agent_continuing(
 
     # o_0, r_0
     obs , info = env.reset()
+    if load_env_state:
+        name = os.path.join(outdir, "checkpoint_{}.json".format(step_offset))
+        env.load_env_state(name)
+        logger.info("Loaded the environment state from %s", name)
 
     t = step_offset
     if hasattr(agent, "t"):
@@ -301,6 +306,7 @@ def train_agent_with_evaluation(
     case = "episodic", # episodic or continuing 
     env_checkpointable = False,
     buffer_checkpointable = False,
+    load_env_state = False,
 ):
     """Train an agent while periodically evaluating it.
 
@@ -390,6 +396,7 @@ def train_agent_with_evaluation(
             wandb_logging=wandb_logging, 
             env_checkpointable=env_checkpointable, 
             buffer_checkpointable=buffer_checkpointable,
+            load_env_state= load_env_state
         )
     else:
         eval_stats_history = train_agent(
