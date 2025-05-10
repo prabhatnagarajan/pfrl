@@ -108,7 +108,7 @@ def train_agent_continuing(
                     if not file_exists:
                         writer.writeheader()
                     average_reward = total_reward / (episode_idx if episode_idx > 0 else 1)
-                    writer.writerow({'step': t, 'episode': episode_idx, 'reward': total_reward, 'average_reward': average_reward})
+                    writer.writerow({'step': t, 'reward': total_reward, 'average_reward': average_reward})
                     if wandb_logging:
                         import wandb
                         wandb.log({'step': t, 'episode': episode_idx, 'reward': total_reward, 'average_reward': average_reward})
@@ -416,7 +416,8 @@ def train_agent_with_evaluation(
             eval_during_episode=eval_during_episode,
             logger=logger,
             wandb_logging=wandb_logging,
-            env_checkpointable=env_checkpointable
+            env_checkpointable=env_checkpointable,
+            buffer_checkpointable=buffer_checkpointable,
         )
 
     return agent, eval_stats_history
