@@ -431,7 +431,6 @@ def train_agent_with_evaluation(
             wandb_logging=wandb_logging,
             env_checkpointable=env_checkpointable,
             buffer_checkpointable=buffer_checkpointable,
-            total_reward_so_far=total_reward_so_far,
             episode_idx=episode_idx,
         )
 
