@@ -167,12 +167,13 @@ def train_agent(
     wandb_logging=False, 
     env_checkpointable=False,
     buffer_checkpointable=False,
+    episode_idx = 0,
 ):
     logger = logger or logging.getLogger(__name__)
 
     episode_r = 0
-    episode_idx = 0
-
+    episode_idx = episode_idx
+    other_bot_reward = 0
     # o_0, r_0
     obs , info = env.reset()
 
@@ -192,6 +193,8 @@ def train_agent(
             
             t += 1
             episode_r += info['untransformed_rewards']
+            if "other_bot_reward" in info:
+                other_bot_reward += info['other_bot_reward']
             episode_len += 1
             reset = episode_len == max_episode_len or info.get("needs_reset", False) or truncated
             agent.observe(obs, r, terminated, reset)
@@ -236,15 +239,24 @@ def train_agent(
                 file_exists = os.path.isfile(csv_filename)
 
                 with open(csv_filename, mode='a', newline='') as csv_file:
-                    fieldnames = ['episode', 'steps', 'reward']
+                    if 'other_bot_reward' in info:
+                        fieldnames = ['episode', 'steps', 'reward', 'other_bot_reward']
+                    else: 
+                        fieldnames = ['episode', 'steps', 'reward']
                     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
                     if not file_exists:
                         writer.writeheader()
-                    writer.writerow({'episode': episode_idx,'steps': t , 'reward': episode_r})
+                    if 'other_bot_reward' in info:
+                        writer.writerow({'episode': episode_idx,'steps': t , 'reward': episode_r, 'other_bot_reward': other_bot_reward})
+                    else:
+                        writer.writerow({'episode': episode_idx,'steps': t , 'reward': episode_r})
                     if wandb_logging:
                         import wandb
-                        writer.writerow({'episode': episode_idx,'steps': t , 'reward': episode_r})
-                
+                        if 'other_bot_reward' in info:
+                            writer.writerow({'episode': episode_idx,'steps': t , 'reward': episode_r, 'other_bot_reward': other_bot_reward})
+                        else:
+                            writer.writerow({'episode': episode_idx,'steps': t , 'reward': episode_r})
+                other_bot_reward = 0
                 episode_r = 0
                 episode_len = 0
                 obs, info = env.reset()
@@ -309,6 +321,7 @@ def train_agent_with_evaluation(
     buffer_checkpointable = False,
     load_env_state = False,
     total_reward_so_far = 0,
+    episode_idx = 0,
 ):
     """Train an agent while periodically evaluating it.
 
@@ -418,6 +431,8 @@ def train_agent_with_evaluation(
             wandb_logging=wandb_logging,
             env_checkpointable=env_checkpointable,
             buffer_checkpointable=buffer_checkpointable,
+            total_reward_so_far=total_reward_so_far,
+            episode_idx=episode_idx,
         )
 
     return agent, eval_stats_history
