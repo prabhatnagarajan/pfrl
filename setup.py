@@ -4,7 +4,7 @@ from setuptools import setup
 
 install_requires = [
     'torch>=1.3.0',
-    'gymnasium[atari]',
+    'gymnasium[mujoco]',
     'numpy>=1.11.0',
     'pillow',
     'filelock',
