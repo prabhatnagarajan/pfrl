@@ -1,6 +1,5 @@
 import logging
 import os
-
 from pfrl.experiments.evaluator import Evaluator, save_agent
 from pfrl.utils.ask_yes_no import ask_yes_no
 import csv
@@ -22,7 +21,7 @@ def ask_and_save_agent_replay_buffer(agent, t, outdir, suffix=""):
     ):  # NOQA
         save_agent_replay_buffer(agent, t, outdir, suffix=suffix)
 
-def train_agent_continuing(
+def train_agent_continuing_RNN(
     agent,
     env,
     steps,
@@ -151,7 +150,7 @@ def train_agent_continuing(
 
 
 
-def train_agent(
+def train_agent_RNN(
     agent,
     env,
     steps,
@@ -295,7 +294,7 @@ def train_agent(
     return eval_stats_history
 
 
-def train_agent_with_evaluation(
+def train_agent_with_evaluation_RNN(
     agent,
     env,
     steps,
@@ -395,7 +394,7 @@ def train_agent_with_evaluation(
     )
 
     if case == "continuing":
-        eval_stats_history = train_agent_continuing(
+        eval_stats_history = train_agent_continuing_RNN(
             agent,
             env,
             steps,
@@ -415,7 +414,7 @@ def train_agent_with_evaluation(
             total_reward_so_far= total_reward_so_far,
         )
     else:
-        eval_stats_history = train_agent(
+        eval_stats_history = train_agent_RNN(
             agent,
             env,
             steps,
