@@ -91,18 +91,30 @@ def _add_log_prob_and_value_to_episodes_recurrent(
         (flat_distribs, flat_vs), _ = pack_and_forward(model, seqs_states, rs)
         (_, flat_next_vs), _ = pack_and_forward(model, seqs_next_states, next_rs)
 
-        flat_actions = torch.tensor(
-            [b["action"] for b in flat_transitions], device=device
+        # flat_actions = torch.tensor(
+        #     [b["action"] for b in flat_transitions], device=device
+        # )
+        flat_actions_c = torch.tensor(
+            [b["action"][0] for b in flat_transitions], device=device
         )
-        flat_log_probs = flat_distribs.log_prob(flat_actions).cpu().numpy()
+        flat_actions_d = torch.tensor(
+            [b["action"][1] for b in flat_transitions], device=device
+        )   
+        # flat_log_probs = flat_distribs.log_prob(flat_actions).cpu().numpy()
+        c_flat_log_probs = flat_distribs[0].log_prob(flat_actions_c).cpu().numpy()
+        d_flat_log_probs = flat_distribs[1].log_prob(flat_actions_d).cpu().numpy()
+        
         flat_vs = flat_vs.cpu().numpy()
+        
         flat_next_vs = flat_next_vs.cpu().numpy()
 
     # Add predicted values to transitions
-    for transition, log_prob, v, next_v in zip(
-        flat_transitions, flat_log_probs, flat_vs, flat_next_vs
+    for transition, c_log_prob, d_log_probs, v, next_v in zip(
+        flat_transitions, c_flat_log_probs, d_flat_log_probs, flat_vs, flat_next_vs
     ):
-        transition["log_prob"] = float(log_prob)
+        # transition["log_prob"] = float(log_prob)
+        transition["c_log_prob"] = float(c_log_prob)
+        transition["d_log_prob"] = float(d_log_probs)
         transition["v_pred"] = float(v)
         transition["next_v_pred"] = float(next_v)
 
@@ -585,10 +597,19 @@ class HybridPPO(agent.AttributeSavingMixin, agent.BatchAgent):
                 states = self.obs_normalizer(states, update=False)
             seqs_states.append(states)
 
-        flat_actions = torch.tensor(
-            [transition["action"] for transition in flat_transitions],
+        # flat_actions = torch.tensor(
+        #     [transition["action"] for transition in flat_transitions],
+        #     device=device,
+        # )
+        c_flat_actions = torch.tensor(
+            [transition["action"][0] for transition in flat_transitions],
             device=device,
         )
+        d_flat_actions = torch.tensor(
+            [transition["action"][1] for transition in flat_transitions],
+            device=device,
+        )
+        
         flat_advs = torch.tensor(
             [transition["adv"] for transition in flat_transitions],
             dtype=torch.float,
@@ -596,8 +617,18 @@ class HybridPPO(agent.AttributeSavingMixin, agent.BatchAgent):
         )
         if self.standardize_advantages:
             flat_advs = (flat_advs - mean_advs) / (std_advs + 1e-8)
-        flat_log_probs_old = torch.tensor(
-            [transition["log_prob"] for transition in flat_transitions],
+        # flat_log_probs_old = torch.tensor(
+        #     [transition["log_prob"] for transition in flat_transitions],
+        #     dtype=torch.float,
+        #     device=device,
+        # )
+        c_flat_log_probs_old = torch.tensor(
+            [transition["c_log_prob"] for transition in flat_transitions],
+            dtype=torch.float,
+            device=device,
+        )
+        d_flat_log_probs_old = torch.tensor(
+            [transition["d_log_prob"] for transition in flat_transitions],
             dtype=torch.float,
             device=device,
         )
@@ -618,16 +649,26 @@ class HybridPPO(agent.AttributeSavingMixin, agent.BatchAgent):
             )
 
         (flat_distribs, flat_vs_pred), _ = pack_and_forward(self.model, seqs_states, rs)
-        flat_log_probs = flat_distribs.log_prob(flat_actions)
-        flat_entropy = flat_distribs.entropy()
+        c_flat_log_probs = flat_distribs[0].log_prob(c_flat_actions)
+        d_flat_log_probs = flat_distribs[1].log_prob(d_flat_actions)
+        flat_entropy = flat_distribs[0].entropy() + flat_distribs[1].entropy()
+        
+        # flat_log_probs = flat_distribs.log_prob(flat_actions)
+        # flat_entropy = flat_distribs.entropy()
 
         self.model.zero_grad()
         loss = self._lossfun(
             entropy=flat_entropy,
             vs_pred=flat_vs_pred,
-            log_probs=flat_log_probs,
+            # log_probs=flat_log_probs,
+            c_log_probs=c_flat_log_probs,
+            d_log_probs=d_flat_log_probs,
+            #HYBRID
             vs_pred_old=flat_vs_pred_old,
-            log_probs_old=flat_log_probs_old,
+            # log_probs_old=flat_log_probs_old,
+            c_log_probs_old=c_flat_log_probs_old,
+            d_log_probs_old=d_flat_log_probs_old,
+            #HYBRID
             advs=flat_advs,
             vs_teacher=flat_vs_teacher,
         )
@@ -781,19 +822,20 @@ class HybridPPO(agent.AttributeSavingMixin, agent.BatchAgent):
                 )
             else:
                 action_distrib, batch_value = self.model(b_state)
-                self.value_record.extend(batch_value.cpu().numpy())
-                if isinstance(action_distrib, tuple):
-                    continous_action_distrib, discrete_action_distrib = action_distrib
-                    batch_action = [(
-                        continous_action_distrib.sample().cpu().numpy()[0],
-                        discrete_action_distrib.sample().cpu().numpy()[0],
-                    )]
+                
+            self.value_record.extend(batch_value.cpu().numpy())
+            if isinstance(action_distrib, tuple):
+                continous_action_distrib, discrete_action_distrib = action_distrib
+                batch_action = [(
+                    continous_action_distrib.sample().cpu().numpy()[0],
+                    discrete_action_distrib.sample().cpu().numpy()[0],
+                )]
 
-                    self.c_entropy_record.extend(continous_action_distrib.entropy().cpu().numpy())
-                    self.d_entropy_record.extend(discrete_action_distrib.entropy().cpu().numpy())
-                else:
-                    batch_action = action_distrib.sample().cpu().numpy()
-                    self.entropy_record.extend(action_distrib.entropy().cpu().numpy())
+                self.c_entropy_record.extend(continous_action_distrib.entropy().cpu().numpy())
+                self.d_entropy_record.extend(discrete_action_distrib.entropy().cpu().numpy())
+            else:
+                batch_action = action_distrib.sample().cpu().numpy()
+                self.entropy_record.extend(action_distrib.entropy().cpu().numpy())
 
         self.batch_last_state = list(batch_obs)
         self.batch_last_action = list(batch_action)
