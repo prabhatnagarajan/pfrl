@@ -152,7 +152,8 @@ def main():
         explorer=explorer,
         minibatch_size=32,
         replay_start_size=args.replay_start_size,
-        target_update_interval=32000, # errata: Should be 8000 steps to match the original paper.
+        # errata: target_update_interval should be 8000 to match original paper.
+        target_update_interval=32000,
         update_interval=update_interval,
         batch_accumulator="mean",
         phi=phi,
