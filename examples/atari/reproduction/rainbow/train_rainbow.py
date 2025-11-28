@@ -152,7 +152,7 @@ def main():
         explorer=explorer,
         minibatch_size=32,
         replay_start_size=args.replay_start_size,
-        target_update_interval=32000,
+        target_update_interval=32000, # errata: 8000 in paper is in units of steps, here in units of updates
         update_interval=update_interval,
         batch_accumulator="mean",
         phi=phi,

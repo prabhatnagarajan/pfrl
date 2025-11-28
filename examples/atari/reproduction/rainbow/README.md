@@ -33,7 +33,11 @@ To view the full list of options, either view the code or run the example with t
 
 
 ## Results
-These results reflect PFRL commit hash:  `a0ad6a7`.
+
+These results reflect PFRL commit hash:  `a0ad6a7`. 
+**Errata: In the original Rainbow paper, the target network was updated every 8000 timesteps, not 32000. The file remains the same as it is the file generating the results.**
+- Source: [Original Rainbow paper - Table 1](https://arxiv.org/pdf/1710.02298)
+- Code: [DQN Zoo Reproduction](https://github.com/google-deepmind/dqn_zoo/blob/master/dqn_zoo/rainbow/run_atari.py#L74)
 
 | Results Summary ||
 | ------------- |:-------------:|
