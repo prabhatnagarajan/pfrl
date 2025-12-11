@@ -1,4 +1,5 @@
 """A training script of Soft Actor-Critic on RoboschoolAtlasForwardWalk-v1."""
+
 import argparse
 import functools
 import logging
