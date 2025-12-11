@@ -3,6 +3,7 @@
 This script follows the settings of https://arxiv.org/abs/1812.05905 as much
 as possible.
 """
+
 import argparse
 import functools
 import logging
@@ -83,7 +84,9 @@ def main():
         "--pretrained-type", type=str, default="best", choices=["best", "final"]
     )
     parser.add_argument(
-        "--monitor", action="store_true", help="Wrap env with gymnasium.wrappers.Monitor."
+        "--monitor",
+        action="store_true",
+        help="Wrap env with gymnasium.wrappers.Monitor.",
     )
     parser.add_argument(
         "--log-interval",

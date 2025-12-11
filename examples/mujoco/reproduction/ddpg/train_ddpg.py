@@ -81,7 +81,9 @@ def main():
         "--pretrained-type", type=str, default="best", choices=["best", "final"]
     )
     parser.add_argument(
-        "--monitor", action="store_true", help="Wrap env with gymnasium.wrappers.Monitor."
+        "--monitor",
+        action="store_true",
+        help="Wrap env with gymnasium.wrappers.Monitor.",
     )
     parser.add_argument(
         "--log-level", type=int, default=logging.INFO, help="Level of the root logger."
