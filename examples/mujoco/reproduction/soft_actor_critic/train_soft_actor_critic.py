@@ -3,6 +3,7 @@
 This script follows the settings of https://arxiv.org/abs/1812.05905 as much
 as possible.
 """
+
 import argparse
 import functools
 import logging

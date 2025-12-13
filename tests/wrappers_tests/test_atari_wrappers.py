@@ -1,7 +1,6 @@
 """Currently this script tests `pfrl.wrappers.atari_wrappers.FrameStack`
 only."""
 
-
 from unittest import mock
 
 import gym
