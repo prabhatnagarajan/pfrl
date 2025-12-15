@@ -1,5 +1,5 @@
-"""Initializes the weights and biases of a layer to chainer default.
-"""
+"""Initializes the weights and biases of a layer to chainer default."""
+
 import torch
 import torch.nn as nn
 

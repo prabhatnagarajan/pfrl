@@ -30,7 +30,6 @@ def cosine_basis_functions(x, n_basis_functions=64):
 
 
 class CosineBasisLinear(nn.Module):
-
     """Linear layer following cosine basis functions.
 
     Args:
@@ -81,7 +80,6 @@ def _evaluate_psi_x_with_quantile_thresholds(psi_x, phi, f, taus):
 
 
 class ImplicitQuantileQFunction(nn.Module):
-
     """Implicit quantile network-based Q-function.
 
     Args:
@@ -125,7 +123,6 @@ class ImplicitQuantileQFunction(nn.Module):
 
 
 class RecurrentImplicitQuantileQFunction(Recurrent, nn.Module):
-
     """Recurrent implicit quantile network-based Q-function.
 
     Args:
@@ -256,7 +253,6 @@ def compute_weighted_value_loss(eltwise_loss, weights, batch_accumulator="mean")
 
 
 class IQN(dqn.DQN):
-
     """Implicit Quantile Networks.
 
     See https://arxiv.org/abs/1806.06923.
