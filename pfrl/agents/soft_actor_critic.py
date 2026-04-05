@@ -119,7 +119,6 @@ class SoftActorCritic(AttributeSavingMixin, BatchAgent):
         temperature_optimizer_lr=None,
         act_deterministically=True,
     ):
-
         self.policy = policy
         self.q_func1 = q_func1
         self.q_func2 = q_func2
@@ -247,8 +246,8 @@ class SoftActorCritic(AttributeSavingMixin, BatchAgent):
         # Update stats
         self.q1_record.extend(predict_q1.detach().cpu().numpy())
         self.q2_record.extend(predict_q2.detach().cpu().numpy())
-        self.q_func1_loss_record.append(float(loss1))
-        self.q_func2_loss_record.append(float(loss2))
+        self.q_func1_loss_record.append(loss1.item())
+        self.q_func2_loss_record.append(loss2.item())
 
         self.q_func1_optimizer.zero_grad()
         loss1.backward()

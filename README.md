@@ -30,7 +30,7 @@ Refer to [Installation](http://pfrl.readthedocs.io/en/latest/install.html) for m
 
 ## Getting started
 
-You can try [PFRL Quickstart Guide](examples/quickstart/quickstart.ipynb) first, or check the [examples](examples) ready for Atari 2600 and Open AI gymnasium.
+You can try [PFRL Quickstart Guide](examples/quickstart/quickstart.ipynb) first, or check the [examples](examples) ready for Atari 2600 and Farama Foundation's gymnasium.
 
 For more information, you can refer to [PFRL's documentation](http://pfrl.readthedocs.io/en/latest/index.html).
 
@@ -40,7 +40,7 @@ For more information, you can refer to [PFRL's documentation](http://pfrl.readth
 
 ## Algorithms
 
-| Algorithm | Discrete Action | Continous Action | Recurrent Model | Batch Training | CPU Async Training | Pretrained models<sup>*</sup> |
+| Algorithm | Discrete Action | Continuous Action | Recurrent Model | Batch Training | CPU Async Training | Pretrained models<sup>*</sup> |
 |:----------|:---------------:|:----------------:|:---------------:|:--------------:|:------------------:|:------------------:|
 | DQN (including DoubleDQN etc.) | ✓ | ✓ (NAF) | ✓ | ✓ | x | ✓ |
 | Categorical DQN | ✓ | x | ✓ | ✓ | x | x |
@@ -99,7 +99,7 @@ Following useful techniques have been also implemented in PFRL:
 
 ## Environments
 
-Environments that support the subset of OpenAI gymnasium's interface (`reset` and `step` methods) can be used.
+Environments that support the subset of Farama Foundation's gymnasium's interface (`reset` and `step` methods) can be used.
 
 ## Contributing
 

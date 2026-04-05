@@ -1,4 +1,4 @@
-"""A training script of Soft Actor-Critic on OpenAI gymnasium Mujoco environments.
+"""A training script of Soft Actor-Critic on Gymnasium Mujoco environments.
 
 This script follows the settings of https://arxiv.org/abs/1812.05905 as much
 as possible.
@@ -20,8 +20,39 @@ from pfrl import experiments, replay_buffers, utils
 from pfrl.nn.lmbda import Lambda
 
 
-def main():
+def make_env(process_idx, test, process_seeds, env_name, render):
+    env = gymnasium.make(env_name)
+    assert isinstance(env, gymnasium.wrappers.TimeLimit)
+    env = env.env
+    # Use different random seeds for train and test envs
+    process_seed = int(process_seeds[process_idx])
+    env_seed = 2**32 - 1 - process_seed if test else process_seed
+    env = SeedWrapper(env, env_seed)
+    # Cast observations to float32 because our model uses float32
+    env = pfrl.wrappers.CastObservationToFloat32(env)
+    # Normalize action space to [-1, 1]^n
+    env = pfrl.wrappers.NormalizeActionSpace(env)
+    if render:
+        env = pfrl.wrappers.Render(env)
+    return env
 
+class SeedWrapper(gymnasium.Wrapper):
+
+    def __init__(self, env, seed):
+        super().__init__(env)
+        self.env = env
+        self.seed = seed
+        self.first_reset = True
+
+    def reset(self, **kwargs):
+        if self.first_reset:
+            self.first_reset = False
+            kwargs['seed'] = self.seed
+            return self.env.reset(**kwargs)
+        else:
+            return self.env.reset(**kwargs)
+
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--outdir",
@@ -35,8 +66,8 @@ def main():
     parser.add_argument(
         "--env",
         type=str,
-        default="Hopper-v2",
-        help="OpenAI gymnasium MuJoCo env to perform algorithm on.",
+        default="Hopper-v5",
+        help="Gymnasium MuJoCo env to perform algorithm on.",
     )
     parser.add_argument(
         "--num-envs", type=int, default=1, help="Number of envs run in parallel."
@@ -57,7 +88,7 @@ def main():
     parser.add_argument(
         "--eval-n-runs",
         type=int,
-        default=10,
+        default=30,
         help="Number of episodes run for each evaluation.",
     )
     parser.add_argument(
@@ -82,9 +113,6 @@ def main():
     parser.add_argument("--load-pretrained", action="store_true", default=False)
     parser.add_argument(
         "--pretrained-type", type=str, default="best", choices=["best", "final"]
-    )
-    parser.add_argument(
-        "--monitor", action="store_true", help="Wrap env with gymnasium.wrappers.Monitor."
     )
     parser.add_argument(
         "--log-interval",
@@ -117,34 +145,15 @@ def main():
     process_seeds = np.arange(args.num_envs) + args.seed * args.num_envs
     assert process_seeds.max() < 2**32
 
-    def make_env(process_idx, test):
-        env = gymnasium.make(args.env)
-        # Unwrap TimiLimit wrapper
-        assert isinstance(env, gymnasium.wrappers.TimeLimit)
-        env = env.env
-        # Use different random seeds for train and test envs
-        process_seed = int(process_seeds[process_idx])
-        env_seed = 2**32 - 1 - process_seed if test else process_seed
-        env.seed(env_seed)
-        # Cast observations to float32 because our model uses float32
-        env = pfrl.wrappers.CastObservationToFloat32(env)
-        # Normalize action space to [-1, 1]^n
-        env = pfrl.wrappers.NormalizeActionSpace(env)
-        if args.monitor:
-            env = gymnasium.wrappers.Monitor(env, args.outdir)
-        if args.render:
-            env = pfrl.wrappers.Render(env)
-        return env
-
     def make_batch_env(test):
         return pfrl.envs.MultiprocessVectorEnv(
             [
-                functools.partial(make_env, idx, test)
+                functools.partial(make_env, idx, test, process_seeds, args.env, args.render)
                 for idx, env in enumerate(range(args.num_envs))
             ]
         )
 
-    sample_env = make_env(process_idx=0, test=False)
+    sample_env = make_env(0, False, process_seeds, args.env, args.render)
     timestep_limit = sample_env.spec.max_episode_steps
     obs_space = sample_env.observation_space
     action_space = sample_env.action_space

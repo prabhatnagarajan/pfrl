@@ -41,7 +41,6 @@ def train_loop(
     logger=None,
     global_step_hooks=[],
 ):
-
     logger = logger or logging.getLogger(__name__)
 
     if eval_env is None:
@@ -55,17 +54,15 @@ def train_loop(
             logger.info("Saved the current model to %s", dirname)
 
     try:
-
         episode_r = 0
         global_t = 0
         local_t = 0
         global_episodes = 0
-        obs = env.reset()
+        obs, info = env.reset()
         episode_len = 0
         successful = False
 
         while True:
-
             # a_t
             a = agent.act(obs)
             # o_{t+1}, r_{t+1}
@@ -122,7 +119,7 @@ def train_loop(
                 # Start a new episode
                 episode_r = 0
                 episode_len = 0
-                obs = env.reset()
+                obs, info = env.reset()
 
             if process_idx == 0 and exception_event.is_set():
                 logger.exception("An exception detected, exiting")

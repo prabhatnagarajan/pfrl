@@ -1,4 +1,5 @@
 """A training script of Soft Actor-Critic on RoboschoolAtlasForwardWalk-v1."""
+
 import argparse
 import functools
 import logging
@@ -45,7 +46,6 @@ def make_env(args, seed, test):
 
 
 def main():
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--outdir",
